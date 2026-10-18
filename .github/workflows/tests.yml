@@ -1,0 +1,46 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  # Hermes commit the contract tests were written against (tests/test_hermes_contract.py).
+  HERMES_COMMIT: 9e01b44dd23978f9ff40b7837467f3a9f1582130
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      # Read-only checkout of Hermes for the integration test. Hermes refuses wheel builds,
+      # so it is put on PYTHONPATH instead of pip-installed; ruamel.yaml is the only
+      # dependency the plugin manager needs.
+      - uses: actions/checkout@v4
+        with:
+          repository: NousResearch/hermes-agent
+          ref: ${{ env.HERMES_COMMIT }}
+          path: .hermes-agent
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install test dependencies
+        run: python -m pip install -r requirements.txt "ruamel.yaml==0.18.16"
+
+      # Tests run in an empty network namespace, so any network access fails.
+      - name: pytest (no network)
+        run: |
+          sudo unshare --net -- sudo -u "$USER" env PATH="$PATH" HOME="$HOME" \
+            PYTHONPATH="$GITHUB_WORKSPACE/.hermes-agent" \
+            python -m pytest -v -rs --ignore=.hermes-agent
