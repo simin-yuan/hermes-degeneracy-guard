@@ -4,7 +4,7 @@ Hermes already cuts a stream that degenerates into a repetition loop. `RunawaySt
 (`agent/repetition_guard.py`) is wired into the streaming path, so repeated content and repeated
 thinking are truncated at runaway scale — introduced by
 [#130551](https://github.com/NousResearch/hermes-agent/pull/130551), merged 2026-10-01, merge commit
-`77c373ac5fbba5a67afd7b6553ad6774815972da`; still present on `main` = `9e01b44d`.
+`77c373ac5fbba5a67afd7b6553ad6774815972da`; still present at `22063fc0`.
 
 What that cut does not cover is the action. A tool call whose arguments are repetition-dominated but
 which arrives with a provider-confirmed finish reason is **deliberately** allowed through — see the
