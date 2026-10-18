@@ -2,6 +2,7 @@
 import os
 import sys
 import tempfile
+import types
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -60,4 +61,25 @@ def test_tool_guard_allows_normal_arguments():
 
 
 def test_state_root_follows_the_environment():
-    assert str(paths.STATE_ROOT) == _TMP
+    assert str(paths.state_root()) == _TMP
+    assert paths.incident_dir() == Path(_TMP) / "incidents"
+
+
+def test_state_root_uses_hermes_plugin_data_dir_on_every_call(monkeypatch, tmp_path):
+    """Without an override, state goes to Hermes' per-plugin data root, resolved per call so a
+    profile switch is followed."""
+    monkeypatch.delenv("DEGENERACY_GUARD_HOME")
+    homes = iter([tmp_path / "a", tmp_path / "b"])
+    storage = types.ModuleType("plugins.plugin_storage")
+    storage.plugin_data_dir = lambda name: next(homes) / "plugin-data" / name
+    monkeypatch.setitem(sys.modules, "plugins", types.ModuleType("plugins"))
+    monkeypatch.setitem(sys.modules, "plugins.plugin_storage", storage)
+    assert paths.state_root() == tmp_path / "a" / "plugin-data" / "degeneracy-guard"
+    assert paths.state_root() == tmp_path / "b" / "plugin-data" / "degeneracy-guard"
+
+
+def test_state_root_outside_hermes_falls_back_to_home(monkeypatch, tmp_path):
+    monkeypatch.delenv("DEGENERACY_GUARD_HOME")
+    monkeypatch.setitem(sys.modules, "plugins.plugin_storage", None)  # import raises ImportError
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    assert paths.state_root() == tmp_path / ".degeneracy-guard"

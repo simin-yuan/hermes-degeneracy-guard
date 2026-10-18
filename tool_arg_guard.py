@@ -15,7 +15,7 @@ import threading
 import time
 from pathlib import Path
 
-from paths import INCIDENT_DIR
+from paths import incident_dir
 
 _lock = threading.Lock()
 
@@ -56,10 +56,11 @@ def _strings_in(obj, out, depth=0):
 
 def _write_incident(inc: dict) -> None:
     try:
-        INCIDENT_DIR.mkdir(parents=True, exist_ok=True)
+        directory = incident_dir()
+        directory.mkdir(parents=True, exist_ok=True)
         stamp = time.strftime("%Y%m%dT%H%M%S")
         safe = str(inc.get("tool", "unknown")).replace("/", "_").replace("\\", "_")[:40]
-        (INCIDENT_DIR / f"{stamp}_TOOLARG_{safe}.json").write_text(
+        (directory / f"{stamp}_TOOLARG_{safe}.json").write_text(
             json.dumps(inc, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception as exc:
         import logging

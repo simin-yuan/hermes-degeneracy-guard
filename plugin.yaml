@@ -1,6 +1,6 @@
 name: degeneracy-guard
-version: 1.0.0
-description: Detects generation degeneracy loops in streaming output, blocks them on the way out, and records an incident.
+version: 1.1.0
+description: Detects repetition loops in model output, blocks tool calls with degenerate arguments, replaces flagged output with a short notice, records incidents locally and warns when a session grows too long.
 author: "Simin (Simon) Yuan"
 provides_hooks:
   - on_stream_delta

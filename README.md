@@ -13,8 +13,8 @@ may legitimately write repetitive data"*). A call is also the only part of a tur
 anything outside the process: a file, a post, a shell command.
 
 This plugin is the supplement to that one point. It runs at `pre_tool_call`, **before the tool
-executes**, scores the arguments, refuses the call when they are degenerate, records an incident,
-and reports it on the next turn.
+executes**, scores the arguments, refuses the call when they are degenerate, and records an incident
+on the local machine.
 
 ## What it does
 
@@ -24,7 +24,7 @@ and reports it on the next turn.
 | `on_stream_delta` | yes, per chunk | no (off the token path) | scores the stream incrementally and writes an incident record |
 | `transform_llm_output` | yes | yes — replaces the output | swaps flagged output for a short notice |
 | `post_llm_call` | yes | no | clears state, records a flag nobody consumed |
-| `pre_llm_call` | yes | yes — injects context | reports the last incident; warns on session length |
+| `pre_llm_call` | yes | yes — injects context | warns once a session passes 500 messages, then every 50 more |
 
 This is a **plugin**: it registers the five hooks above and never edits a file shipped by Hermes.
 It was renamed because a public project already used its former name:
@@ -49,8 +49,8 @@ that queue.
   degenerate text that lands in a file, a post, or a shell command is damage.
 - The stream observer is at `on_stream_delta` because that is the earliest point where degenerate
   text is visible, and an incident record needs it.
-- The recovery notice is at `pre_llm_call` because an incident nobody reports is just a quieter dead
-  end.
+- The session-length warning is at `pre_llm_call` because long sessions are where loops grow, and
+  that hook can add a note to the next request before the model runs.
 
 ## Thresholds
 
@@ -93,11 +93,16 @@ Then restart Hermes (a running gateway: `hermes gateway restart`) and confirm it
 hermes plugins doctor degeneracy-guard
 ```
 
-Expect `OK` and `6 hook(s)`. `hermes plugins list` only shows whether the plugin is enabled in
+Expect `OK` and `5 hook(s)`. `hermes plugins list` only shows whether the plugin is enabled in
 config, not whether it loaded.
 
-State (incident records, counters) goes to `~/.degeneracy-guard` by default (on Windows,
-`%USERPROFILE%\.degeneracy-guard`); set `DEGENERACY_GUARD_HOME` to move it.
+State (incident records, the session-length counter) goes to Hermes' per-plugin data root,
+`<HERMES_HOME>/plugin-data/degeneracy-guard/` (`plugins.plugin_storage.plugin_data_dir`). It follows
+the active Hermes profile and survives `hermes plugins update` and `hermes plugins remove`. On native
+Windows that is `%LOCALAPPDATA%\hermes\plugin-data\degeneracy-guard\` unless `HERMES_HOME` is set.
+Set `DEGENERACY_GUARD_HOME` to put it somewhere else. Outside Hermes (for example this repository's
+own tests without an override) it falls back to `~/.degeneracy-guard`
+(`%USERPROFILE%\.degeneracy-guard` on Windows).
 
 ## Tests
 
@@ -112,7 +117,7 @@ modules are thin adapters around it.
 
 ## Disclosure
 
-No network calls, shell commands, background processes, telemetry or credentials. The plugin reads only the hook payloads Hermes passes to it. It writes JSON incident records and small counters under its own state directory (`~/.degeneracy-guard`, or `DEGENERACY_GUARD_HOME`). A stream-side incident record keeps the last 800 characters of the flagged output, and incident details can quote a short excerpt of the repeated text; these files stay on the local machine.
+No network calls, shell commands, background processes, telemetry or credentials. The plugin reads only the hook payloads Hermes passes to it. It writes JSON incident records and a small session-length counter under its own state directory: `<HERMES_HOME>/plugin-data/degeneracy-guard/` inside Hermes, `DEGENERACY_GUARD_HOME` when set, or `~/.degeneracy-guard` outside Hermes. A stream-side incident record keeps the last 800 characters of the flagged output, and incident details can quote a short excerpt of the repeated text; these files stay on the local machine.
 
 ## License
 

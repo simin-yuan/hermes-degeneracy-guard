@@ -48,7 +48,7 @@ def _ensure_sibling_path() -> None:
 # plugin directory on sys.path, so a module-level ``from paths import ...`` fails otherwise.
 _ensure_sibling_path()
 
-from paths import INCIDENT_DIR  # noqa: E402
+from paths import incident_dir  # noqa: E402
 
 _lock = threading.Lock()
 _states: dict[str, object] = {}   # key: session_id|turn_id -> StreamBreakerState
@@ -84,9 +84,10 @@ def _key(**kw) -> str:
 
 def _write_incident(inc: dict) -> None:
     try:
-        INCIDENT_DIR.mkdir(parents=True, exist_ok=True)
+        directory = incident_dir()
+        directory.mkdir(parents=True, exist_ok=True)
         stamp = inc["ts"].replace(":", "").replace("-", "")
-        path = INCIDENT_DIR / f"{stamp}_{inc['key'].replace('|', '_')}.json"
+        path = directory / f"{stamp}_{inc['key'].replace('|', '_')}.json"
         path.write_text(json.dumps(inc, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception as exc:
         logger.error("degeneracy-guard: incident write failed: %s", exc)
@@ -169,9 +170,6 @@ def register(ctx):
     # that can produce an external side effect.
     from tool_arg_guard import on_pre_tool_call
     ctx.register_hook("pre_tool_call", on_pre_tool_call)
-    # An abort that is not reported to the next turn is just a different kind of dead end.
-    from resume_notice import on_pre_llm_call as _on_resume
-    ctx.register_hook("pre_llm_call", _on_resume)
     # Long sessions are where degeneracy grows: prevention is about length, not detection.
     from session_length_guard import on_pre_llm_call as _on_length
     ctx.register_hook("pre_llm_call", _on_length)

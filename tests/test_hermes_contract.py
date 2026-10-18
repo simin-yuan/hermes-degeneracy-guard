@@ -17,8 +17,8 @@ import pytest
 
 _ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_ROOT))
-# Plugin modules are imported inside the tests, not here: paths.STATE_ROOT is fixed at first
-# import, and test_degeneracy_guard.py sets its own DEGENERACY_GUARD_HOME during collection.
+# Keep every write out of the user's home; test_degeneracy_guard.py sets its own
+# DEGENERACY_GUARD_HOME during collection.
 os.environ.setdefault("DEGENERACY_GUARD_HOME", tempfile.mkdtemp(prefix="degeneracy-guard-test-"))
 
 UPSTREAM_COMMIT = "9e01b44dd23978f9ff40b7837467f3a9f1582130"
@@ -142,12 +142,10 @@ def test_block_return_shape_matches_upstream():
 
 def test_pre_llm_call_return_shape():
     """agent/turn_context.py:835-836: a dict with a truthy "context" is injected."""
-    import resume_notice
     import session_length_guard
     r = session_length_guard.on_pre_llm_call(
         session_id="contract", conversation_history=[{"content": "x"}] * 600)
     assert isinstance(r, dict) and isinstance(r.get("context"), str) and r["context"]
-    assert resume_notice.on_pre_llm_call(is_first_turn=False) is None
 
 
 def test_plugin_loads_without_its_directory_on_sys_path(tmp_path):
@@ -180,7 +178,9 @@ _HERMES = importlib.util.find_spec("hermes_cli") is not None
 @pytest.mark.skipif(not _HERMES, reason="hermes-agent is not installed (optional integration test)")
 def test_real_hermes_plugin_manager_blocks_degenerate_tool_call(tmp_path):
     """Load the plugin through Hermes' own discovery and drive pre_tool_call through the
-    function every executor calls (_dispatch_pre_tool_call_hooks, plugins.py:2091-2099)."""
+    function every executor calls (_dispatch_pre_tool_call_hooks, plugins.py:2091-2099).
+    With no DEGENERACY_GUARD_HOME, the incident lands in Hermes' per-plugin data root
+    (plugins/plugin_storage.py plugin_data_dir)."""
     home = tmp_path / "hermes"
     dest = home / "plugins" / "degeneracy-guard"
     dest.mkdir(parents=True)
@@ -197,7 +197,8 @@ def test_real_hermes_plugin_manager_blocks_degenerate_tool_call(tmp_path):
         "  'block': P._dispatch_pre_tool_call_hooks('write_file', bad, session_id='s')[0],\n"
         "  'ok': P._dispatch_pre_tool_call_hooks('write_file', {'content': 'hi'})[0]}))\n"
     )
-    env = {**os.environ, "HERMES_HOME": str(home), "DEGENERACY_GUARD_HOME": str(tmp_path / "lb")}
+    env = {**os.environ, "HERMES_HOME": str(home)}
+    env.pop("DEGENERACY_GUARD_HOME", None)
     out = subprocess.run([sys.executable, "-P", "-c", code], cwd=tmp_path, env=env,
                          capture_output=True, text=True, timeout=300)
     assert out.returncode == 0, out.stderr
@@ -205,3 +206,5 @@ def test_real_hermes_plugin_manager_blocks_degenerate_tool_call(tmp_path):
     assert res["error"] is None
     assert res["block"] and res["block"].startswith("DEGENERACY_GUARD_BLOCK")
     assert res["ok"] is None
+    incidents = list((home / "plugin-data" / "degeneracy-guard" / "incidents").glob("*_TOOLARG_*.json"))
+    assert len(incidents) == 1

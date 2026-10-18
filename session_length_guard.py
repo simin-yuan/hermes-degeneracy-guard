@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import time
 
-from paths import STATE_ROOT
+from paths import state_root
 
 # -- Frozen thresholds ----------------------------------------------------------------
 # Half of the largest session seen in practice. A conservative extrapolation from a single
@@ -27,20 +27,21 @@ MAX_MESSAGES = 500
 MAX_APPROX_TOKENS = 150_000
 RENOTIFY_EVERY_N_NEW_MESSAGES = 50
 
-_STATE = STATE_ROOT / "session_length_state.json"
+_STATE_FILE = "session_length_state.json"
 
 
 def _load_state() -> dict:
     try:
-        return json.loads(_STATE.read_text(encoding="utf-8"))
+        return json.loads((state_root() / _STATE_FILE).read_text(encoding="utf-8"))
     except Exception:
         return {}
 
 
 def _save_state(s: dict) -> None:
     try:
-        _STATE.parent.mkdir(parents=True, exist_ok=True)
-        _STATE.write_text(json.dumps(s, ensure_ascii=False), encoding="utf-8")
+        path = state_root() / _STATE_FILE
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(s, ensure_ascii=False), encoding="utf-8")
     except Exception:
         pass
 
