@@ -27,8 +27,6 @@ import threading
 import time
 from pathlib import Path
 
-from paths import INCIDENT_DIR
-
 logger = logging.getLogger(__name__)
 
 
@@ -45,6 +43,12 @@ def _ensure_sibling_path() -> None:
     if d not in sys.path:
         sys.path.insert(0, d)
 
+
+# Must run before the first sibling import below: the loader execs this file without the
+# plugin directory on sys.path, so a module-level ``from paths import ...`` fails otherwise.
+_ensure_sibling_path()
+
+from paths import INCIDENT_DIR  # noqa: E402
 
 _lock = threading.Lock()
 _states: dict[str, object] = {}   # key: session_id|turn_id -> StreamBreakerState
