@@ -110,6 +110,10 @@ python -m pytest -q
 Used in daily operation. `loop_detector.py` is pure and testable without a host; the hook
 modules are thin adapters around it.
 
+## Disclosure
+
+No network calls, shell commands, background processes, telemetry or credentials. The plugin reads only the hook payloads Hermes passes to it. It writes JSON incident records and small counters under its own state directory (`~/.degeneracy-guard`, or `DEGENERACY_GUARD_HOME`). A stream-side incident record keeps the last 800 characters of the flagged output, and incident details can quote a short excerpt of the repeated text; these files stay on the local machine.
+
 ## License
 
 Apache-2.0. See `LICENSE` and `NOTICE`.
