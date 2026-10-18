@@ -55,8 +55,37 @@ that can be re-tuned mid-incident cannot be used as evidence afterwards.
 
 ## Install
 
-Copy the directory into the host's plugin directory and enable it. State goes to
-`~/.loop-breaker` by default; set `LOOP_BREAKER_HOME` to move it.
+Checked against [`NousResearch/hermes-agent`](https://github.com/NousResearch/hermes-agent) at
+`9e01b44dd23978f9ff40b7837467f3a9f1582130`.
+
+Hermes looks for user plugins in `<HERMES_HOME>/plugins/<dir>/plugin.yaml`
+(`hermes_cli/plugins_discovery.py:209`). `HERMES_HOME` defaults to `~/.hermes` on Linux and macOS
+(and under WSL) and to `%LOCALAPPDATA%\hermes` on native Windows (`hermes_constants.py:51-58`); an
+explicit `HERMES_HOME` environment variable overrides both.
+
+User plugins are **opt-in**: a plugin in that directory is skipped until it is in `plugins.enabled`
+in `config.yaml` (`hermes_cli/plugins_discovery.py:299-302`). `hermes plugins enable` adds it there.
+The name to enable is the manifest `name`, `degeneracy-guard`.
+
+Linux / macOS:
+
+```bash
+git clone https://github.com/simin-yuan/hermes-degeneracy-guard ~/.hermes/plugins/degeneracy-guard
+hermes plugins enable degeneracy-guard
+```
+
+Windows (PowerShell, native install):
+
+```powershell
+git clone https://github.com/simin-yuan/hermes-degeneracy-guard "$env:LOCALAPPDATA\hermes\plugins\degeneracy-guard"
+hermes plugins enable degeneracy-guard
+```
+
+Then restart Hermes (a running gateway: `hermes gateway restart`). `hermes plugins list` should show
+`degeneracy-guard` as `enabled`.
+
+State (incident records, counters) goes to `~/.loop-breaker` by default (on Windows,
+`%USERPROFILE%\.loop-breaker`); set `LOOP_BREAKER_HOME` to move it.
 
 ## Tests
 
