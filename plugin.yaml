@@ -1,7 +1,7 @@
-name: loop-breaker
+name: degeneracy-guard
 version: 1.0.0
 description: Detects generation degeneracy loops in streaming output, blocks them on the way out, and records an incident.
-author: Simon Yuan
+author: "Simin (Simon) Yuan"
 hooks:
   - on_stream_delta
   - transform_llm_output

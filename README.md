@@ -1,4 +1,4 @@
-# hermes-loop-breaker
+# hermes-degeneracy-guard
 
 **A model stuck in a repetition loop can report that it is repeating and still cannot stop.
 This plugin stops it from outside.**
@@ -16,10 +16,17 @@ it out of tool arguments, and leave a record of every time it happened.
 | `pre_tool_call` | yes | yes - blocks the call | refuses tool arguments that are degenerate output |
 | `pre_llm_call` | yes | yes - injects context | reports the last abort; warns on session length |
 
+This is a **plugin**: it registers the five hooks above and never edits a file shipped by Hermes.
+The earlier project of the same name, [`zima2042/hermes-loop-breaker`](https://github.com/zima2042/hermes-loop-breaker),
+attacks the same problem with a patch to four core files — that works, but it needs a restart and
+drifts every time upstream moves.
+
 The honest limit is in the first row: **no plugin hook can abort a generation in progress.**
-Detection is real time, aborts are not. A true abort needs a breaker flag checked inside the
-core streaming loop; until that exists, this plugin replaces output instead of stopping it,
-and says so in every incident record.
+Detection is real time, aborts are not. The core does have a cut of its own — `RunawayStreamWatch`
+in `agent/repetition_guard.py`, wired into the streaming path — which closes a stream that
+degenerates at runaway scale; it is not reachable from a plugin, and it does not fire on short
+periodic loops or on tool arguments. So this plugin replaces output instead of stopping it, and
+says so in every incident record. A plugin-visible abort is the piece that is still missing.
 
 ## Why guards sit where they do
 
