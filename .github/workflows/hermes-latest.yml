@@ -1,0 +1,51 @@
+name: hermes-latest
+
+# Same checks as tests.yml, against the current Hermes main instead of the pinned commit.
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hermes-latest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          repository: NousResearch/hermes-agent
+          ref: main
+          path: .hermes-agent
+          persist-credentials: false
+
+      - name: Hermes commit under test
+        run: |
+          commit="$(git -C .hermes-agent rev-parse HEAD)"
+          echo "Hermes commit: $commit"
+          echo "Hermes commit: \`$commit\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install Hermes and pytest
+        run: |
+          python -m pip install uv
+          uv venv -p "$(command -v python)" "$RUNNER_TEMP/hermes-venv"
+          VIRTUAL_ENV="$RUNNER_TEMP/hermes-venv" uv pip install -e .hermes-agent pytest
+
+      # Plugin enabled through config.yaml in a temporary HERMES_HOME; no network.
+      - name: hermes plugins validate / doctor (no network)
+        run: |
+          sudo unshare --net -- sudo -u "$USER" env PATH="$PATH" HOME="$HOME" \
+            .github/scripts/hermes-tools.sh "$RUNNER_TEMP/hermes-venv/bin/hermes"
+
+      # Tests run in an empty network namespace, so any network access fails.
+      - name: pytest (no network)
+        run: |
+          sudo unshare --net -- sudo -u "$USER" env PATH="$PATH" HOME="$HOME" \
+            "$RUNNER_TEMP/hermes-venv/bin/python" -m pytest -v -rs --ignore=.hermes-agent

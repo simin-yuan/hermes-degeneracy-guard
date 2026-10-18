@@ -8,8 +8,8 @@ permissions:
   contents: read
 
 env:
-  # Hermes commit the contract tests were written against (tests/test_hermes_contract.py).
-  HERMES_COMMIT: 9e01b44dd23978f9ff40b7837467f3a9f1582130
+  # Hermes commit the plugin is checked against (README "Checked against").
+  HERMES_COMMIT: 22063fc099ec9ad8357d7f8f6e6248a0400680d3
 
 jobs:
   pytest:
@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v4
 
@@ -44,3 +44,32 @@ jobs:
           sudo unshare --net -- sudo -u "$USER" env PATH="$PATH" HOME="$HOME" \
             PYTHONPATH="$GITHUB_WORKSPACE/.hermes-agent" \
             python -m pytest -v -rs --ignore=.hermes-agent
+
+  # Hermes' own plugin checks. Its CLI dependencies need Python 3.14.
+  hermes-tools:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          repository: NousResearch/hermes-agent
+          ref: ${{ env.HERMES_COMMIT }}
+          path: .hermes-agent
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install Hermes
+        run: |
+          python -m pip install uv
+          uv venv -p "$(command -v python)" "$RUNNER_TEMP/hermes-venv"
+          VIRTUAL_ENV="$RUNNER_TEMP/hermes-venv" uv pip install -e .hermes-agent
+
+      # Plugin enabled through config.yaml in a temporary HERMES_HOME; no network.
+      - name: hermes plugins validate / doctor (no network)
+        run: |
+          sudo unshare --net -- sudo -u "$USER" env PATH="$PATH" HOME="$HOME" \
+            .github/scripts/hermes-tools.sh "$RUNNER_TEMP/hermes-venv/bin/hermes"
