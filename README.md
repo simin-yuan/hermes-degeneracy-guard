@@ -38,6 +38,10 @@ It does not stop a generation in progress: no plugin hook can abort the stream, 
 with core's `RunawayStreamWatch`, and this plugin relies on it. `on_stream_delta` observes and records;
 `pre_tool_call` is where the intervention happens. Each incident record says which of the two acted.
 
+`on_stream_delta` runs on a bounded background queue that drops the oldest events when full, so a
+stream-side flag can arrive after `transform_llm_output` has run; `pre_tool_call` does not depend on
+that queue.
+
 ## Why guards sit where they do
 
 - The action guard is at `pre_tool_call` because a tool call is the only thing that produces a side
@@ -57,7 +61,7 @@ that can be re-tuned mid-incident cannot be used as evidence afterwards.
 ## Install
 
 Checked against [`NousResearch/hermes-agent`](https://github.com/NousResearch/hermes-agent) at
-`9e01b44dd23978f9ff40b7837467f3a9f1582130`.
+`22063fc099ec9ad8357d7f8f6e6248a0400680d3`. The plugin passes `hermes plugins validate`.
 
 Hermes looks for user plugins in `<HERMES_HOME>/plugins/<dir>/plugin.yaml`
 (`hermes_cli/plugins_discovery.py:209`). `HERMES_HOME` defaults to `~/.hermes` on Linux and macOS
@@ -66,7 +70,8 @@ explicit `HERMES_HOME` environment variable overrides both.
 
 User plugins are **opt-in**: a plugin in that directory is skipped until it is in `plugins.enabled`
 in `config.yaml` (`hermes_cli/plugins_discovery.py:299-302`). `hermes plugins enable` adds it there.
-The name to enable is the manifest `name`, `degeneracy-guard`.
+The name to enable is the manifest `name`, `degeneracy-guard`. `hermes plugins enable` needs network
+access because Hermes syncs its own environment; if that step fails, the plugin stays disabled.
 
 Linux / macOS:
 
@@ -82,8 +87,14 @@ git clone https://github.com/simin-yuan/hermes-degeneracy-guard "$env:LOCALAPPDA
 hermes plugins enable degeneracy-guard
 ```
 
-Then restart Hermes (a running gateway: `hermes gateway restart`). `hermes plugins list` should show
-`degeneracy-guard` as `enabled`.
+Then restart Hermes (a running gateway: `hermes gateway restart`) and confirm it loaded:
+
+```bash
+hermes plugins doctor degeneracy-guard
+```
+
+Expect `OK` and `6 hook(s)`. `hermes plugins list` only shows whether the plugin is enabled in
+config, not whether it loaded.
 
 State (incident records, counters) goes to `~/.degeneracy-guard` by default (on Windows,
 `%USERPROFILE%\.degeneracy-guard`); set `DEGENERACY_GUARD_HOME` to move it.
