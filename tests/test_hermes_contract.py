@@ -85,13 +85,23 @@ def _registered():
 def _manifest_hooks():
     out, in_hooks = [], False
     for line in (_ROOT / "plugin.yaml").read_text(encoding="utf-8").splitlines():
-        if line.startswith("hooks:"):
+        if line.startswith("provides_hooks:"):
             in_hooks = True
         elif in_hooks and line.strip().startswith("- "):
             out.append(line.strip()[2:].strip())
         elif in_hooks and line and not line.startswith(" "):
             break
     return out
+
+
+def test_manifest_uses_provides_hooks_not_legacy_hooks_key():
+    """At 22063fc0 the loader accepts the legacy "hooks:" alias (hermes_cli/plugins_manifest.py:551),
+    but `hermes plugins validate` only reads provides_hooks (hermes_cli/plugin_validate.py:381-385)."""
+    keys = [line.split(":", 1)[0] for line in
+            (_ROOT / "plugin.yaml").read_text(encoding="utf-8").splitlines()
+            if line and not line[0].isspace() and ":" in line]
+    assert "hooks" not in keys
+    assert "provides_hooks" in keys
 
 
 def test_registered_hooks_match_manifest_and_valid_hooks():

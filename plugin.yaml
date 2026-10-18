@@ -2,7 +2,7 @@ name: degeneracy-guard
 version: 1.0.0
 description: Detects generation degeneracy loops in streaming output, blocks them on the way out, and records an incident.
 author: "Simin (Simon) Yuan"
-hooks:
+provides_hooks:
   - on_stream_delta
   - transform_llm_output
   - post_llm_call
