@@ -80,7 +80,7 @@ def on_pre_llm_call(session_id: str = "", is_first_turn: bool = False, **kw):
     detail = rec.get("detail", "")
 
     return {"context": (
-        "[The previous generation was aborted by the loop breaker]\n"
+        "[The previous generation was aborted by degeneracy-guard]\n"
         f"  time: {when}\n"
         f"  session: {where}\n"
         f"  reason: {reason} - {detail}\n"

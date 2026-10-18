@@ -27,9 +27,10 @@ and reports it on the next turn.
 | `pre_llm_call` | yes | yes — injects context | reports the last incident; warns on session length |
 
 This is a **plugin**: it registers the five hooks above and never edits a file shipped by Hermes.
-The earlier project of the same name, [`zima2042/hermes-loop-breaker`](https://github.com/zima2042/hermes-loop-breaker),
-attacks the same problem with a patch to four core files — that works, but it needs a restart and
-drifts every time upstream moves.
+It was renamed because a public project already used its former name:
+[`zima2042/hermes-loop-breaker`](https://github.com/zima2042/hermes-loop-breaker), which attacks the
+same problem with a patch to four core files — that works, but it needs a restart and drifts every
+time upstream moves.
 
 ## What this plugin does not do
 
@@ -84,8 +85,8 @@ hermes plugins enable degeneracy-guard
 Then restart Hermes (a running gateway: `hermes gateway restart`). `hermes plugins list` should show
 `degeneracy-guard` as `enabled`.
 
-State (incident records, counters) goes to `~/.loop-breaker` by default (on Windows,
-`%USERPROFILE%\.loop-breaker`); set `LOOP_BREAKER_HOME` to move it.
+State (incident records, counters) goes to `~/.degeneracy-guard` by default (on Windows,
+`%USERPROFILE%\.degeneracy-guard`); set `DEGENERACY_GUARD_HOME` to move it.
 
 ## Tests
 

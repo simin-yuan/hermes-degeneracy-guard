@@ -18,8 +18,8 @@ import pytest
 _ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_ROOT))
 # Plugin modules are imported inside the tests, not here: paths.STATE_ROOT is fixed at first
-# import, and test_loop_breaker.py sets its own LOOP_BREAKER_HOME during collection.
-os.environ.setdefault("LOOP_BREAKER_HOME", tempfile.mkdtemp(prefix="loop-breaker-test-"))
+# import, and test_degeneracy_guard.py sets its own DEGENERACY_GUARD_HOME during collection.
+os.environ.setdefault("DEGENERACY_GUARD_HOME", tempfile.mkdtemp(prefix="degeneracy-guard-test-"))
 
 UPSTREAM_COMMIT = "9e01b44dd23978f9ff40b7837467f3a9f1582130"
 
@@ -166,7 +166,7 @@ def test_plugin_loads_without_its_directory_on_sys_path(tmp_path):
         "    def register_hook(self, h, cb): self.n.append(h)\n"
         "c = C(); m.register(c); print(','.join(c.n))\n"
     )
-    env = {**os.environ, "LOOP_BREAKER_HOME": str(tmp_path)}
+    env = {**os.environ, "DEGENERACY_GUARD_HOME": str(tmp_path)}
     env.pop("PYTHONPATH", None)
     out = subprocess.run([sys.executable, "-I", "-c", code], cwd=tmp_path, env=env,
                          capture_output=True, text=True)
@@ -197,11 +197,11 @@ def test_real_hermes_plugin_manager_blocks_degenerate_tool_call(tmp_path):
         "  'block': P._dispatch_pre_tool_call_hooks('write_file', bad, session_id='s')[0],\n"
         "  'ok': P._dispatch_pre_tool_call_hooks('write_file', {'content': 'hi'})[0]}))\n"
     )
-    env = {**os.environ, "HERMES_HOME": str(home), "LOOP_BREAKER_HOME": str(tmp_path / "lb")}
+    env = {**os.environ, "HERMES_HOME": str(home), "DEGENERACY_GUARD_HOME": str(tmp_path / "lb")}
     out = subprocess.run([sys.executable, "-P", "-c", code], cwd=tmp_path, env=env,
                          capture_output=True, text=True, timeout=300)
     assert out.returncode == 0, out.stderr
     res = json.loads(out.stdout.strip().splitlines()[-1])
     assert res["error"] is None
-    assert res["block"] and res["block"].startswith("LOOP_BREAKER_BLOCK")
+    assert res["block"] and res["block"].startswith("DEGENERACY_GUARD_BLOCK")
     assert res["ok"] is None

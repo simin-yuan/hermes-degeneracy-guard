@@ -1,4 +1,4 @@
-"""Tests for the loop breaker. Run with: python -m pytest -q"""
+"""Tests for degeneracy-guard. Run with: python -m pytest -q"""
 import os
 import sys
 import tempfile
@@ -8,8 +8,8 @@ _ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_ROOT))
 
 # Keep every write out of the user's home; this must happen before the modules import.
-_TMP = tempfile.mkdtemp(prefix="loop-breaker-test-")
-os.environ["LOOP_BREAKER_HOME"] = _TMP
+_TMP = tempfile.mkdtemp(prefix="degeneracy-guard-test-")
+os.environ["DEGENERACY_GUARD_HOME"] = _TMP
 
 import loop_detector as ld          # noqa: E402
 import tool_arg_guard as tag        # noqa: E402
@@ -51,7 +51,7 @@ def test_tool_guard_blocks_degenerate_arguments():
     r = tag.on_pre_tool_call(tool_name="write_file",
                              args={"content": "\n".join(["same line"] * 30)})
     assert r and r["action"] == "block"
-    assert "LOOP_BREAKER_BLOCK" in r["message"]
+    assert "DEGENERACY_GUARD_BLOCK" in r["message"]
 
 
 def test_tool_guard_allows_normal_arguments():

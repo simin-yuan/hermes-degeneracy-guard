@@ -1,4 +1,4 @@
-"""loop-breaker: detects generation degeneracy loops and refuses to let them act.
+"""degeneracy-guard: detects generation degeneracy loops and refuses to let them act.
 
 A model in a repeat loop can say "I am repeating" and still cannot stop. That is the
 premise of this plugin: the breaker runs outside the model, on the stream and on the way
@@ -55,7 +55,7 @@ _states: dict[str, object] = {}   # key: session_id|turn_id -> StreamBreakerStat
 _flagged: dict[str, dict] = {}    # key -> incident dict (read by transform_llm_output)
 
 _REPLACEMENT = (
-    "This turn was stopped by loop-breaker: the output was judged a degeneracy loop and "
+    "This turn was stopped by degeneracy-guard: the output was judged a degeneracy loop and "
     "the original text was not committed to the session.\n"
     "Thresholds: see FROZEN_THRESHOLDS in loop_detector.py.\n"
     "This is an incident record, not a reply - start a new turn."
@@ -74,7 +74,7 @@ def _load_detector():
 try:
     _DET = _load_detector()
 except Exception as exc:            # never take the host down because a detector is missing
-    logger.error("loop-breaker: failed to load loop_detector: %s", exc)
+    logger.error("degeneracy-guard: failed to load loop_detector: %s", exc)
     _DET = None
 
 
@@ -89,7 +89,7 @@ def _write_incident(inc: dict) -> None:
         path = INCIDENT_DIR / f"{stamp}_{inc['key'].replace('|', '_')}.json"
         path.write_text(json.dumps(inc, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception as exc:
-        logger.error("loop-breaker: incident write failed: %s", exc)
+        logger.error("degeneracy-guard: incident write failed: %s", exc)
 
 
 def on_stream_delta(delta=None, kind="text", **kw):
@@ -128,7 +128,7 @@ def on_stream_delta(delta=None, kind="text", **kw):
         }
         _flagged[key] = inc
         _write_incident(inc)
-    logger.warning("loop-breaker TRIGGERED %s: %s | %s", verdict.reason, verdict.detail, key)
+    logger.warning("degeneracy-guard TRIGGERED %s: %s | %s", verdict.reason, verdict.detail, key)
 
 
 def transform_llm_output(response_text=None, **kw):
@@ -145,7 +145,7 @@ def transform_llm_output(response_text=None, **kw):
         inc["original_chars"] = len(response_text or "")
         _write_incident(inc)
         _flagged.pop(key, None)
-    logger.warning("loop-breaker: replaced degenerate output for %s", key)
+    logger.warning("degeneracy-guard: replaced degenerate output for %s", key)
     return _REPLACEMENT
 
 

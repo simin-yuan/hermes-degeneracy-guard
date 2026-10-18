@@ -96,7 +96,7 @@ def on_pre_tool_call(tool_name: str = "", args=None, session_id: str = "", **kw)
         }
         with _lock:
             _write_incident(inc)
-        msg = (f"LOOP_BREAKER_BLOCK: tool arguments match the degeneracy criteria "
+        msg = (f"DEGENERACY_GUARD_BLOCK: tool arguments match the degeneracy criteria "
                f"({v.reason}: {v.detail}). The argument looks like degenerate output and "
                f"was blocked before it could reach the outside world. "
                f"Retry in a fresh session.")
