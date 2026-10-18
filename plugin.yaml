@@ -1,0 +1,10 @@
+name: loop-breaker
+version: 1.0.0
+description: Detects generation degeneracy loops in streaming output, blocks them on the way out, and records an incident.
+author: Simon Yuan
+hooks:
+  - on_stream_delta
+  - transform_llm_output
+  - post_llm_call
+  - pre_tool_call
+  - pre_llm_call
