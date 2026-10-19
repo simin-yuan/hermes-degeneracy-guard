@@ -1,14 +1,15 @@
 """pre_llm_call guard: long sessions are where degeneracy grows.
 
-Detection handles the symptom; length handles the cause. Very long contexts keep a
-compression threshold from ever firing, because a ratio-based trigger stays quiet once the
-window is large enough.
+Detection handles the symptom; length handles the cause. The guard does not touch runtime
+configuration (which is protected from the agent). It observes the size of the conversation
+on ``pre_llm_call`` and suggests starting a new session.
 
-This guard does not touch runtime configuration (which is protected from the agent). It
-observes the size of the conversation on ``pre_llm_call`` and asks the session to restart.
+MAX_MESSAGES is a design constant, not a measurement of real usage: it is set low enough
+that a session which reaches it has a context worth restarting, and high enough that normal
+work never sees the notice.
 
-Thresholds are frozen. De-bounce: one reminder per RENOTIFY_EVERY_N_NEW_MESSAGES messages
-in the same session, so the notice does not appear on every turn.
+Thresholds are frozen. De-bounce: one reminder per RENOTIFY_EVERY_N_NEW_MESSAGES messages in
+the same session, so the notice does not appear on every turn.
 """
 
 from __future__ import annotations
@@ -16,15 +17,12 @@ from __future__ import annotations
 import json
 import time
 
-from paths import state_root
+from .paths import state_root
 
 # -- Frozen thresholds ----------------------------------------------------------------
-# Half of the largest session seen in practice. A conservative extrapolation from a single
-# observation, not a measured optimum: erring early costs one restart, erring late costs a
-# degenerate turn.
 MAX_MESSAGES = 500
-# Rough conversion: characters / 3.5 per token, summed over content and tool calls.
-MAX_APPROX_TOKENS = 150_000
+# Rough conversion used only to report an approximate context size: characters / 3.5.
+CHARS_PER_TOKEN = 3.5
 RENOTIFY_EVERY_N_NEW_MESSAGES = 50
 
 _STATE_FILE = "session_length_state.json"
@@ -47,7 +45,7 @@ def _save_state(s: dict) -> None:
 
 
 def _rough_tokens(history) -> int:
-    """Rough context estimate: characters in content/tool_calls divided by 3.5."""
+    """Rough context estimate: characters in content/tool_calls divided by CHARS_PER_TOKEN."""
     total = 0
     try:
         for m in history or []:
@@ -62,7 +60,7 @@ def _rough_tokens(history) -> int:
                 total += len(str(m))
     except Exception:
         return 0
-    return int(total / 3.5)
+    return int(total / CHARS_PER_TOKEN)
 
 
 def check_session_length(session_id: str, history) -> str | None:
@@ -84,11 +82,12 @@ def check_session_length(session_id: str, history) -> str | None:
     _save_state(st)
 
     return (
-        "[Session too long - start a new one]\n"
-        f"  {n} messages (limit {MAX_MESSAGES}), context roughly {tok:,} tokens "
-        f"(limit {MAX_APPROX_TOKENS:,}).\n"
-        "  Degeneracy loops happen in long sessions: repetition is what a model falls back "
-        "on when the context stops fitting, and detection only repairs the symptom.\n"
+        "[Session length notice]\n"
+        f"  This session has {n} messages (the plugin suggests a new session after "
+        f"{MAX_MESSAGES}); the context is roughly {tok:,} tokens.\n"
+        "  Degeneracy loops are a risk in very long sessions: repetition is what a model "
+        "falls back on when the context stops fitting, and detection only repairs the "
+        "symptom.\n"
         "  Write the current state to disk, then start a new session with just the "
         "conclusions you need."
     )
