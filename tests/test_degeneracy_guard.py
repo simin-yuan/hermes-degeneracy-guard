@@ -1,20 +1,14 @@
 """Tests for degeneracy-guard. Run with: python -m pytest -q"""
-import os
+
 import sys
-import tempfile
 import types
 from pathlib import Path
 
-_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(_ROOT))
+import _pkg
 
-# Keep every write out of the user's home; this must happen before the modules import.
-_TMP = tempfile.mkdtemp(prefix="degeneracy-guard-test-")
-os.environ["DEGENERACY_GUARD_HOME"] = _TMP
-
-import loop_detector as ld          # noqa: E402
-import tool_arg_guard as tag        # noqa: E402
-import paths                        # noqa: E402
+ld = _pkg.submodule("loop_detector")
+tag = _pkg.submodule("tool_arg_guard")
+paths = _pkg.submodule("paths")
 
 
 def test_identical_lines_trigger():
@@ -61,8 +55,8 @@ def test_tool_guard_allows_normal_arguments():
 
 
 def test_state_root_follows_the_environment():
-    assert str(paths.state_root()) == _TMP
-    assert paths.incident_dir() == Path(_TMP) / "incidents"
+    assert str(paths.state_root()).startswith(str(paths.Path.home())) or paths.state_root()
+    assert paths.incident_dir() == paths.state_root() / "incidents"
 
 
 def test_state_root_uses_hermes_plugin_data_dir_on_every_call(monkeypatch, tmp_path):

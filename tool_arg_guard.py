@@ -5,39 +5,48 @@ arguments of tool calls. ``transform_llm_output`` only sees the assistant's visi
 and it runs after the tool loop, so it guards the wrong exit. The action that reaches the
 outside world is the tool call, so the check belongs on ``pre_tool_call``.
 
+The rule itself lives in ``loop_detector.judge_tool_arg``: tool arguments are data, and a
+payload that carries a data-like shape with variety (a table, a JSON array, a matrix, a CSV
+export) is allowed through even when it repeats, matching the case Hermes core allows on
+purpose. Only repetition with no data-like excuse is refused.
+
 Returning ``{"action": "block", "message": ...}`` refuses the call.
 """
 
 from __future__ import annotations
 
 import json
+import logging
+import os
 import threading
 import time
-from pathlib import Path
 
-from paths import incident_dir
+from . import loop_detector
+from .paths import incident_path
+
+logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
 
-# Arguments shorter than this cannot be a loop; skipping them keeps the guard cheap.
-MIN_CHARS = 200
+# Arguments shorter than this cannot be a loop; the detector applies the same bound.
+MIN_CHARS = loop_detector.TOOL_ARG_THRESHOLDS["min_chars"]
+
+# Tools the user has exempted, read on every call so a value exported in a shell applies to
+# the next tool call without a restart. No caching: a stale allow-list would be a silent
+# hole in the guard.
+ALLOW_ENV = "DEGENERACY_GUARD_ALLOW_TOOLS"
+
+_BLOCK_MESSAGE = (
+    "DEGENERACY_GUARD_BLOCK: the arguments for this tool call are repetition-dominated "
+    "({reason}: {detail}). The call was refused before it could reach the outside world.\n"
+    "If the content is intentional: split it across several calls, or let this tool through "
+    "by adding it to {env} (comma-separated tool names) and retrying."
+)
 
 
-def _load_detector():
-    d = str(Path(__file__).resolve().parent)
-    import sys
-    if d not in sys.path:
-        sys.path.insert(0, d)
-    import loop_detector as mod
-    return mod
-
-
-try:
-    _DET = _load_detector()
-except Exception as exc:
-    import logging
-    logging.getLogger(__name__).error("tool-arg guard: detector load failed: %s", exc)
-    _DET = None
+def allowed_tools() -> set[str]:
+    raw = os.environ.get(ALLOW_ENV, "")
+    return {x.strip() for x in raw.split(",") if x.strip()}
 
 
 def _strings_in(obj, out, depth=0):
@@ -56,51 +65,46 @@ def _strings_in(obj, out, depth=0):
 
 def _write_incident(inc: dict) -> None:
     try:
-        directory = incident_dir()
-        directory.mkdir(parents=True, exist_ok=True)
-        stamp = time.strftime("%Y%m%dT%H%M%S")
-        safe = str(inc.get("tool", "unknown")).replace("/", "_").replace("\\", "_")[:40]
-        (directory / f"{stamp}_TOOLARG_{safe}.json").write_text(
-            json.dumps(inc, ensure_ascii=False, indent=2), encoding="utf-8")
+        path = incident_path(f"TOOLARG_{inc.get('tool', 'unknown')}")
+        path.write_text(json.dumps(inc, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception as exc:
-        import logging
-        logging.getLogger(__name__).error("tool-arg guard: incident write failed: %s", exc)
+        logger.error("tool-arg guard: incident write failed: %s", exc)
 
 
 def on_pre_tool_call(tool_name: str = "", args=None, session_id: str = "", **kw):
-    """Block a tool call whose arguments match the degeneracy criteria."""
-    if _DET is None or not isinstance(args, dict):
+    """Block a tool call whose arguments are degenerate rather than data."""
+    if not isinstance(args, dict):
+        return None
+    if tool_name and tool_name in allowed_tools():
         return None
 
-    strings = []
+    strings: list[str] = []
     _strings_in(args, strings)
-    if not strings:
-        return None
 
     for field_text in strings:
         if not field_text or len(field_text) < MIN_CHARS:
             continue
-        v = _DET.check_text(field_text)
-        if v is None or not v.triggered:
+        verdict = loop_detector.judge_tool_arg(field_text)
+        if not verdict.block:
             continue
         inc = {
             "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
             "kind": "TOOL_ARG_GUARD",
             "tool": tool_name,
             "session_id": session_id,
-            "reason": v.reason,
-            "detail": v.detail,
-            "metric": v.metric,
+            "reason": verdict.reason,
+            "detail": verdict.detail,
             "arg_chars": len(field_text),
+            "metrics": verdict.metrics,
             "action": "blocked",
-            "thresholds": _DET.FROZEN_THRESHOLDS,
+            "thresholds": loop_detector.TOOL_ARG_THRESHOLDS,
         }
         with _lock:
             _write_incident(inc)
-        msg = (f"DEGENERACY_GUARD_BLOCK: tool arguments match the degeneracy criteria "
-               f"({v.reason}: {v.detail}). The argument looks like degenerate output and "
-               f"was blocked before it could reach the outside world. "
-               f"Retry in a fresh session.")
-        return {"action": "block", "message": msg}
+        return {
+            "action": "block",
+            "message": _BLOCK_MESSAGE.format(
+                reason=verdict.reason, detail=verdict.detail, env=ALLOW_ENV),
+        }
 
     return None

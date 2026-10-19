@@ -1,7 +1,7 @@
 """Contract tests against the Hermes plugin API.
 
 Every expectation below was read from NousResearch/hermes-agent at commit
-9e01b44dd23978f9ff40b7837467f3a9f1582130 (main, 2026-10-18). File:line references are to
+22063fc099ec9ad8357d7f8f6e6248a0400680d3 (the commit CI pins, main 2026-10-18). File:line references are to
 that commit. If upstream moves, re-read those lines before changing a test.
 """
 import importlib.util
@@ -15,13 +15,17 @@ from pathlib import Path
 
 import pytest
 
+import types
+import uuid
+
+import _pkg
+
 _ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(_ROOT))
 # Keep every write out of the user's home; test_degeneracy_guard.py sets its own
 # DEGENERACY_GUARD_HOME during collection.
 os.environ.setdefault("DEGENERACY_GUARD_HOME", tempfile.mkdtemp(prefix="degeneracy-guard-test-"))
 
-UPSTREAM_COMMIT = "9e01b44dd23978f9ff40b7837467f3a9f1582130"
+UPSTREAM_COMMIT = "22063fc099ec9ad8357d7f8f6e6248a0400680d3"
 
 # The subset of VALID_HOOKS this plugin uses (hermes_cli/plugins.py:107-113).
 UPSTREAM_VALID_HOOKS_USED = {
@@ -67,10 +71,24 @@ class _Ctx:
 
 
 def _load_plugin_like_hermes(name="hermes_plugins.degeneracy_guard_test"):
-    """Import __init__.py the way hermes_cli/plugins_loader.py:739-748 does."""
+    """Import __init__.py the way hermes_cli/plugins_loader.py does: as a package.
+
+    The loader first registers the ``hermes_plugins`` namespace package, then imports the
+    plugin directory as ``hermes_plugins.<slug>`` with the directory as its search location,
+    which is what makes the plugin's relative imports resolve.
+    """
+    parent = name.rpartition(".")[0]
+    if parent and parent not in sys.modules:
+        ns = types.ModuleType(parent)
+        ns.__path__ = []          # type: ignore[attr-defined]
+        ns.__package__ = parent
+        sys.modules[parent] = ns
     spec = importlib.util.spec_from_file_location(
         name, _ROOT / "__init__.py", submodule_search_locations=[str(_ROOT)])
+    sys.modules.pop(name, None)
     mod = importlib.util.module_from_spec(spec)
+    mod.__package__ = name
+    mod.__path__ = [str(_ROOT)]   # type: ignore[attr-defined]
     sys.modules[name] = mod
     spec.loader.exec_module(mod)
     return mod
@@ -129,8 +147,8 @@ def test_block_return_shape_matches_upstream():
     message vetoes the call; the message becomes the tool result. Executors return before
     dispatch on a block: model_tools.py:787-788 and :941-944, agent/tool_executor.py:739-745,
     agent/agent_runtime_helpers.py:2540-2541."""
-    import tool_arg_guard
-    r = tool_arg_guard.on_pre_tool_call(
+    tag = _pkg.submodule("tool_arg_guard")
+    r = tag.on_pre_tool_call(
         tool_name="write_file", args={"content": "\n".join(["same line"] * 30)},
         task_id="", session_id="s", tool_call_id="c", turn_id="t", api_request_id="",
         middleware_trace=[], telemetry_schema_version=1)
@@ -142,9 +160,12 @@ def test_block_return_shape_matches_upstream():
 
 def test_pre_llm_call_return_shape():
     """agent/turn_context.py:835-836: a dict with a truthy "context" is injected."""
-    import session_length_guard
-    r = session_length_guard.on_pre_llm_call(
-        session_id="contract", conversation_history=[{"content": "x"}] * 600)
+    slg = _pkg.submodule("session_length_guard")
+    # Unique id: the notice is de-bounced per session, so a reused id could be silenced by
+    # state left behind by an earlier run.
+    r = slg.on_pre_llm_call(
+        session_id=f"contract-{uuid.uuid4().hex}",
+        conversation_history=[{"content": "x"}] * 600)
     assert isinstance(r, dict) and isinstance(r.get("context"), str) and r["context"]
 
 
@@ -152,12 +173,15 @@ def test_plugin_loads_without_its_directory_on_sys_path(tmp_path):
     """The loader does not add the plugin directory to sys.path (plugins_loader.py:739-748).
     Run in a clean interpreter so this test's own sys.path cannot hide a failure."""
     code = (
-        "import importlib.util, sys\n"
+        "import importlib.util, sys, types\n"
         f"root = {str(_ROOT)!r}\n"
         "assert root not in sys.path\n"
+        "ns = types.ModuleType('hermes_plugins'); ns.__path__ = []; "
+        "ns.__package__ = 'hermes_plugins'; sys.modules['hermes_plugins'] = ns\n"
         "spec = importlib.util.spec_from_file_location('hermes_plugins.dg', root + '/__init__.py',"
         " submodule_search_locations=[root])\n"
-        "m = importlib.util.module_from_spec(spec); sys.modules['hermes_plugins.dg'] = m\n"
+        "m = importlib.util.module_from_spec(spec); m.__package__ = 'hermes_plugins.dg';"
+        " m.__path__ = [root]; sys.modules['hermes_plugins.dg'] = m\n"
         "spec.loader.exec_module(m)\n"
         "class C:\n"
         "    n = []\n"
@@ -172,7 +196,8 @@ def test_plugin_loads_without_its_directory_on_sys_path(tmp_path):
     assert set(out.stdout.strip().split(",")) == set(_manifest_hooks())
 
 
-_HERMES = importlib.util.find_spec("hermes_cli") is not None
+_HERMES = (importlib.util.find_spec("hermes_cli") is not None
+           and importlib.util.find_spec("hermes_yaml") is not None)
 
 
 @pytest.mark.skipif(not _HERMES, reason="hermes-agent is not installed (optional integration test)")
@@ -186,6 +211,12 @@ def test_real_hermes_plugin_manager_blocks_degenerate_tool_call(tmp_path):
     dest.mkdir(parents=True)
     for f in list(_ROOT.glob("*.py")) + [_ROOT / "plugin.yaml"]:
         (dest / f.name).write_bytes(f.read_bytes())
+    # Drop the version gate: this test drives whatever hermes-agent is importable, and the
+    # >=0.22.2 floor is verified separately by running validate/doctor at the v0.22.2 tag.
+    manifest = (dest / "plugin.yaml").read_text(encoding="utf-8")
+    (dest / "plugin.yaml").write_text(
+        "".join(line for line in manifest.splitlines(True)
+                if not line.startswith("requires_hermes")), encoding="utf-8")
     (home / "config.yaml").write_text("plugins:\n  enabled:\n    - degeneracy-guard\n")
     code = (
         "import json\n"

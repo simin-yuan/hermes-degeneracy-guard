@@ -1,0 +1,50 @@
+def handler_00(request):
+    """Route 00."""
+    return service.handle(request, route=0)
+
+
+def handler_01(request):
+    """Route 01."""
+    return service.handle(request, route=1)
+
+
+def handler_02(request):
+    """Route 02."""
+    return service.handle(request, route=2)
+
+
+def handler_03(request):
+    """Route 03."""
+    return service.handle(request, route=3)
+
+
+def handler_04(request):
+    """Route 04."""
+    return service.handle(request, route=4)
+
+
+def handler_05(request):
+    """Route 05."""
+    return service.handle(request, route=5)
+
+
+def handler_06(request):
+    """Route 06."""
+    return service.handle(request, route=6)
+
+
+def handler_07(request):
+    """Route 07."""
+    return service.handle(request, route=7)
+
+
+def handler_08(request):
+    """Route 08."""
+    return service.handle(request, route=8)
+
+
+def handler_09(request):
+    """Route 09."""
+    return service.handle(request, route=9)
+
+

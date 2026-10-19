@@ -1,0 +1,14 @@
+| id | name | status |
+|---:|---|---|
+| 1 | service-01 | healthy |
+| 2 | service-02 | healthy |
+| 3 | service-03 | healthy |
+| 4 | service-04 | healthy |
+| 5 | service-05 | healthy |
+| 6 | service-06 | healthy |
+| 7 | service-07 | healthy |
+| 8 | service-08 | healthy |
+| 9 | service-09 | healthy |
+| 10 | service-10 | healthy |
+| 11 | service-11 | healthy |
+| 12 | service-12 | healthy |

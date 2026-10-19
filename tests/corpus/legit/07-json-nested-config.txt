@@ -1,0 +1,78 @@
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8080,
+    "workers": 4
+  },
+  "limits": {
+    "rps": 120,
+    "burst": 240,
+    "timeout_s": 30
+  },
+  "retry": {
+    "attempts": 5,
+    "backoff": [
+      1,
+      2,
+      4,
+      8,
+      16
+    ]
+  },
+  "features": {
+    "flag_0": true,
+    "flag_1": false,
+    "flag_2": true,
+    "flag_3": false,
+    "flag_4": true,
+    "flag_5": false,
+    "flag_6": true,
+    "flag_7": false,
+    "flag_8": true,
+    "flag_9": false
+  },
+  "routes": [
+    {
+      "path": "/v1/resource0",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "path": "/v1/resource1",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "path": "/v1/resource2",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "path": "/v1/resource3",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "path": "/v1/resource4",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    },
+    {
+      "path": "/v1/resource5",
+      "methods": [
+        "GET",
+        "POST"
+      ]
+    }
+  ]
+}

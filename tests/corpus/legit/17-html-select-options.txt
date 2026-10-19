@@ -1,0 +1,12 @@
+<select name="region">
+  <option value="cn-north">Cn-North</option>
+  <option value="cn-south">Cn-South</option>
+  <option value="cn-east">Cn-East</option>
+  <option value="cn-west">Cn-West</option>
+  <option value="us-east">Us-East</option>
+  <option value="us-west">Us-West</option>
+  <option value="eu-central">Eu-Central</option>
+  <option value="ap-south">Ap-South</option>
+  <option value="ap-northeast">Ap-Northeast</option>
+  <option value="sa-east">Sa-East</option>
+</select>

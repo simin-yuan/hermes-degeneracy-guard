@@ -1,0 +1,20 @@
+- [ ] step 0: pending
+- [x] step 1: done
+- [x] step 2: done
+- [ ] step 3: pending
+- [x] step 4: done
+- [x] step 5: done
+- [ ] step 6: pending
+- [x] step 7: done
+- [x] step 8: done
+- [ ] step 9: pending
+- [x] step 10: done
+- [x] step 11: done
+- [ ] step 12: pending
+- [x] step 13: done
+- [x] step 14: done
+- [ ] step 15: pending
+- [x] step 16: done
+- [x] step 17: done
+- [ ] step 18: pending
+- [x] step 19: done

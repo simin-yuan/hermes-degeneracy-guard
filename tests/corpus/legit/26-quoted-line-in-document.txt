@@ -1,0 +1,38 @@
+Notes from the review meeting.
+
+The reviewer repeated one sentence while checking the diff, so it appears here as a
+quotation rather than as the whole document:
+
+>" "t"h"e" "b"u"i"l"d" "p"a"s"s"e"d" "a"n"d" "t"h"e" "t"e"s"t"s" "a"r"e" "g"r"e"e"n"
+">" "t"h"e" "b"u"i"l"d" "p"a"s"s"e"d" "a"n"d" "t"h"e" "t"e"s"t"s" "a"r"e" "g"r"e"e"n"
+">" "t"h"e" "b"u"i"l"d" "p"a"s"s"e"d" "a"n"d" "t"h"e" "t"e"s"t"s" "a"r"e" "g"r"e"e"n"
+">" "t"h"e" "b"u"i"l"d" "p"a"s"s"e"d" "a"n"d" "t"h"e" "t"e"s"t"s" "a"r"e" "g"r"e"e"n"
+">" "t"h"e" "b"u"i"l"d" "p"a"s"s"e"d" "a"n"d" "t"h"e" "t"e"s"t"s" "a"r"e" "g"r"e"e"n"
+">" "t"h"e" "b"u"i"l"d" "p"a"s"s"e"d" "a"n"d" "t"h"e" "t"e"s"t"s" "a"r"e" "g"r"e"e"n"
+">" "t"h"e" "b"u"i"l"d" "p"a"s"s"e"d" "a"n"d" "t"h"e" "t"e"s"t"s" "a"r"e" "g"r"e"e"n"
+">" "t"h"e" "b"u"i"l"d" "p"a"s"s"e"d" "a"n"d" "t"h"e" "t"e"s"t"s" "a"r"e" "g"r"e"e"n"
+">" "t"h"e" "b"u"i"l"d" "p"a"s"s"e"d" "a"n"d" "t"h"e" "t"e"s"t"s" "a"r"e" "g"r"e"e"n"
+">" "t"h"e" "b"u"i"l"d" "p"a"s"s"e"d" "a"n"d" "t"h"e" "t"e"s"t"s" "a"r"e" "g"r"e"e"n"
+">" "t"h"e" "b"u"i"l"d" "p"a"s"s"e"d" "a"n"d" "t"h"e" "t"e"s"t"s" "a"r"e" "g"r"e"e"n"
+">" "t"h"e" "b"u"i"l"d" "p"a"s"s"e"d" "a"n"d" "t"h"e" "t"e"s"t"s" "a"r"e" "g"r"e"e"n"
+">" "t"h"e" "b"u"i"l"d" "p"a"s"s"e"d" "a"n"d" "t"h"e" "t"e"s"t"s" "a"r"e" "g"r"e"e"n"
+">" "t"h"e" "b"u"i"l"d" "p"a"s"s"e"d" "a"n"d" "t"h"e" "t"e"s"t"s" "a"r"e" "g"r"e"e"n"
+">" "t"h"e" "b"u"i"l"d" "p"a"s"s"e"d" "a"n"d" "t"h"e" "t"e"s"t"s" "a"r"e" "g"r"e"e"n"
+">" "t"h"e" "b"u"i"l"d" "p"a"s"s"e"d" "a"n"d" "t"h"e" "t"e"s"t"s" "a"r"e" "g"r"e"e"n"
+">" "t"h"e" "b"u"i"l"d" "p"a"s"s"e"d" "a"n"d" "t"h"e" "t"e"s"t"s" "a"r"e" "g"r"e"e"n"
+">" "t"h"e" "b"u"i"l"d" "p"a"s"s"e"d" "a"n"d" "t"h"e" "t"e"s"t"s" "a"r"e" "g"r"e"e"n"
+
+After the quotation the notes continue with unrelated material:
+
+Action item 0: follow up with owner A about topic 0.
+Action item 1: follow up with owner B about topic 1.
+Action item 2: follow up with owner C about topic 2.
+Action item 3: follow up with owner D about topic 3.
+Action item 4: follow up with owner E about topic 4.
+Action item 5: follow up with owner A about topic 5.
+Action item 6: follow up with owner B about topic 6.
+Action item 7: follow up with owner C about topic 7.
+Action item 8: follow up with owner D about topic 8.
+Action item 9: follow up with owner E about topic 9.
+Action item 10: follow up with owner A about topic 10.
+Action item 11: follow up with owner B about topic 11.
