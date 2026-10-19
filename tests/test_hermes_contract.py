@@ -142,20 +142,20 @@ def test_callbacks_accept_exact_upstream_kwargs(hook):
         cb(**{k: _SAMPLE[k] for k in sent})  # must not raise
 
 
-def test_block_return_shape_matches_upstream():
-    """hermes_cli/plugins.py:2002-2023: only a dict with action == "block" and a non-empty str
-    message vetoes the call; the message becomes the tool result. Executors return before
-    dispatch on a block: model_tools.py:787-788 and :941-944, agent/tool_executor.py:739-745,
-    agent/agent_runtime_helpers.py:2540-2541."""
+def test_ask_return_shape_matches_upstream():
+    """hermes_cli/plugins.py:2006-2039: a dict with action == "approve" is held back while the
+    whole hook list is scanned for a veto (block wins), then becomes a human-approval request;
+    ``rule_key`` picks the "[a]lways" grain and defaults to the tool name when absent."""
     tag = _pkg.submodule("tool_arg_guard")
     r = tag.on_pre_tool_call(
         tool_name="write_file", args={"content": "\n".join(["same line"] * 30)},
         task_id="", session_id="s", tool_call_id="c", turn_id="t", api_request_id="",
         middleware_trace=[], telemetry_schema_version=1)
     assert isinstance(r, dict)
-    assert set(r) == {"action", "message"}
-    assert r["action"] == "block"
+    assert set(r) == {"action", "message", "rule_key"}
+    assert r["action"] == "approve"
     assert isinstance(r["message"], str) and r["message"]
+    assert r["rule_key"] == "degeneracy-guard:write_file"
 
 
 def test_pre_llm_call_return_shape():
@@ -201,11 +201,15 @@ _HERMES = (importlib.util.find_spec("hermes_cli") is not None
 
 
 @pytest.mark.skipif(not _HERMES, reason="hermes-agent is not installed (optional integration test)")
-def test_real_hermes_plugin_manager_blocks_degenerate_tool_call(tmp_path):
-    """Load the plugin through Hermes' own discovery and drive pre_tool_call through the
-    function every executor calls (_dispatch_pre_tool_call_hooks, plugins.py:2091-2099).
-    With no DEGENERACY_GUARD_HOME, the incident lands in Hermes' per-plugin data root
-    (plugins/plugin_storage.py plugin_data_dir)."""
+def test_real_hermes_plugin_manager_asks_then_blocks_on_denial(tmp_path):
+    """Load the plugin through Hermes' own discovery, then drive the real fail-closed path:
+    ``_get_pre_tool_call_directive_details`` (plugins.py:1979) turns our hook's dict into an
+    ``approve`` directive, and ``resolve_pre_tool_block`` (``_resolve_block_from_details``,
+    plugins.py:2059-2088) runs the approval gate. Approving proceeds; denying, erroring or
+    timing out blocks. The gate itself is replaced by a double, because the real one waits on
+    a human. With no DEGENERACY_GUARD_HOME, incidents land in Hermes' per-plugin data root
+    (plugins/plugin_storage.py plugin_data_dir).
+    """
     home = tmp_path / "hermes"
     dest = home / "plugins" / "degeneracy-guard"
     dest.mkdir(parents=True)
@@ -221,12 +225,29 @@ def test_real_hermes_plugin_manager_blocks_degenerate_tool_call(tmp_path):
     code = (
         "import json\n"
         "from hermes_cli import plugins as P\n"
+        "import tools.approval as A\n"
         "P.discover_plugins()\n"
-        "lp = P.get_plugin_manager()._plugins['degeneracy-guard']\n"
+        "assert P.get_plugin_manager()._plugins['degeneracy-guard'].error is None\n"
         "bad = {'content': '\\n'.join(['same line'] * 30)}\n"
-        "print(json.dumps({'error': lp.error,\n"
-        "  'block': P._dispatch_pre_tool_call_hooks('write_file', bad, session_id='s')[0],\n"
-        "  'ok': P._dispatch_pre_tool_call_hooks('write_file', {'content': 'hi'})[0]}))\n"
+        "d = P._get_pre_tool_call_directive_details('write_file', bad, session_id='s')\n"
+        "out = {'action': d.action, 'rule_key': d.rule_key,\n"
+        "       'clean': P.get_pre_tool_call_directive('write_file', {'content': 'hi'})[0]}\n"
+        "seen = {}\n"
+        "def gate(result=None, boom=None):\n"
+        "    def call(tool, message, rule_key=None, **kw):\n"
+        "        seen.update(tool=tool, message=message, rule_key=rule_key)\n"
+        "        if boom: raise boom\n"
+        "        return result\n"
+        "    return call\n"
+        "A.request_tool_approval = gate({'approved': True, 'message': 'ok'})\n"
+        "out['approved'] = P.resolve_pre_tool_block('write_file', bad, session_id='s')\n"
+        "A.request_tool_approval = gate({'approved': False, 'message': 'USER DENIED'})\n"
+        "out['denied'] = P.resolve_pre_tool_block('write_file', bad, session_id='s')\n"
+        "A.request_tool_approval = gate(boom=TimeoutError('no answer'))\n"
+        "out['timeout'] = P.resolve_pre_tool_block('write_file', bad, session_id='s')\n"
+        "A.request_tool_approval = gate({'approved': True, 'message': 'ok'})\n"
+        "out['gate_saw'] = seen\n"
+        "print(json.dumps(out))\n"
     )
     env = {**os.environ, "HERMES_HOME": str(home)}
     env.pop("DEGENERACY_GUARD_HOME", None)
@@ -234,8 +255,15 @@ def test_real_hermes_plugin_manager_blocks_degenerate_tool_call(tmp_path):
                          capture_output=True, text=True, timeout=300)
     assert out.returncode == 0, out.stderr
     res = json.loads(out.stdout.strip().splitlines()[-1])
-    assert res["error"] is None
-    assert res["block"] and res["block"].startswith("DEGENERACY_GUARD_BLOCK")
-    assert res["ok"] is None
+    assert res["action"] == "approve"
+    assert res["rule_key"] == "degeneracy-guard:write_file"
+    assert res["clean"] is None
+    assert res["approved"] is None                              # user allowed it: the call runs
+    assert res["denied"] == "USER DENIED"                       # user refused: blocked
+    assert res["timeout"].startswith("BLOCKED")                 # gate errored: fail closed
+    assert res["gate_saw"]["message"].startswith("DEGENERACY_GUARD_APPROVAL")
+    assert res["gate_saw"]["rule_key"] == "degeneracy-guard:write_file"
     incidents = list((home / "plugin-data" / "degeneracy-guard" / "incidents").glob("*_TOOLARG_*.json"))
-    assert len(incidents) == 1
+    assert incidents
+    rec = json.loads(incidents[0].read_text(encoding="utf-8"))
+    assert rec["action"] == "approve_requested"

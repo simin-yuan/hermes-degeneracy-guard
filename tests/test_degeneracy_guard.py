@@ -42,11 +42,11 @@ def test_stream_state_latches_once():
     assert saw == 1
 
 
-def test_tool_guard_blocks_degenerate_arguments():
+def test_tool_guard_asks_about_degenerate_arguments():
     r = tag.on_pre_tool_call(tool_name="write_file",
                              args={"content": "\n".join(["same line"] * 30)})
-    assert r and r["action"] == "block"
-    assert "DEGENERACY_GUARD_BLOCK" in r["message"]
+    assert r and r["action"] == "approve"
+    assert "DEGENERACY_GUARD_APPROVAL" in r["message"]
 
 
 def test_tool_guard_allows_normal_arguments():

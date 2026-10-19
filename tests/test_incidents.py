@@ -15,10 +15,10 @@ def _payload():
     return {"content": "\n".join(["same line"] * 40)}
 
 
-def test_four_blocks_in_one_second_leave_four_files(tmp_path, monkeypatch):
+def test_four_asks_in_one_second_leave_four_files(tmp_path, monkeypatch):
     monkeypatch.setenv("DEGENERACY_GUARD_HOME", str(tmp_path))
     for _ in range(4):
-        assert tag.on_pre_tool_call(tool_name="write_file", args=_payload())["action"] == "block"
+        assert tag.on_pre_tool_call(tool_name="write_file", args=_payload())["action"] == "approve"
     files = list((tmp_path / "incidents").glob("*.json"))
     assert len(files) == 4, [f.name for f in files]
 
