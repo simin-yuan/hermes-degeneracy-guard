@@ -1,16 +1,20 @@
-"""pre_tool_call guard: catch degenerate content on its way into tool arguments.
+"""pre_tool_call guard: hand repetition-dominated tool arguments to the user.
 
 Why this layer is necessary: a degeneracy loop writes its repeated text into the JSON
 arguments of tool calls. ``transform_llm_output`` only sees the assistant's visible text,
 and it runs after the tool loop, so it guards the wrong exit. The action that reaches the
 outside world is the tool call, so the check belongs on ``pre_tool_call``.
 
-The rule itself lives in ``loop_detector.judge_tool_arg``: tool arguments are data, and a
-payload that carries a data-like shape with variety (a table, a JSON array, a matrix, a CSV
-export) is allowed through even when it repeats, matching the case Hermes core allows on
-purpose. Only repetition with no data-like excuse is refused.
+Why it asks instead of refusing: content alone cannot tell a deliberately repeated payload
+from a model stuck in a loop — a thousand-row zero matrix is data in one call and pathology
+in the next, and only the user knows which. So the guard does not rule on intent. When the
+arguments look like repetition without a data shape, it returns
+``{"action": "approve", ...}`` and Hermes runs its own human-approval gate: the user either
+approves (once, or always for this tool), or the call is refused — including when the gate
+times out or no human is present, because that gate is fail-closed.
 
-Returning ``{"action": "block", "message": ...}`` refuses the call.
+The measured cost of that choice is published in README.md: a hold-out set written without
+sight of these rules, and how many of its legitimate payloads reach the prompt.
 """
 
 from __future__ import annotations
@@ -36,11 +40,18 @@ MIN_CHARS = loop_detector.TOOL_ARG_THRESHOLDS["min_chars"]
 # hole in the guard.
 ALLOW_ENV = "DEGENERACY_GUARD_ALLOW_TOOLS"
 
-_BLOCK_MESSAGE = (
-    "DEGENERACY_GUARD_BLOCK: the arguments for this tool call are repetition-dominated "
-    "({reason}: {detail}). The call was refused before it could reach the outside world.\n"
-    "If the content is intentional: split it across several calls, or let this tool through "
-    "by adding it to {env} (comma-separated tool names) and retrying."
+# Grain of the "[a]lways allow" answer. Per tool, not per argument: the same tool asked again
+# with different content should not re-prompt every ten seconds.
+RULE_KEY_PREFIX = "degeneracy-guard"
+
+_ASK_MESSAGE = (
+    "DEGENERACY_GUARD_APPROVAL: these arguments look like a repetition loop rather than "
+    "data ({reason}: {detail}). No data shape was found in the payload, so this guard cannot "
+    "tell an intentional repeat from a stuck generation — that call is yours to make.\n"
+    "Approve to run the call as written. If this kind of content is normal for this tool, "
+    "choose \"always\" and it will not ask again for {tool!r}.\n"
+    "Deny, or leave it unanswered, and the call is refused.\n"
+    "To exempt the tool entirely, list it in {env} (comma-separated tool names)."
 )
 
 
@@ -72,7 +83,7 @@ def _write_incident(inc: dict) -> None:
 
 
 def on_pre_tool_call(tool_name: str = "", args=None, session_id: str = "", **kw):
-    """Block a tool call whose arguments are degenerate rather than data."""
+    """Ask the user about a tool call whose arguments are repetition without a data shape."""
     if not isinstance(args, dict):
         return None
     if tool_name and tool_name in allowed_tools():
@@ -85,7 +96,7 @@ def on_pre_tool_call(tool_name: str = "", args=None, session_id: str = "", **kw)
         if not field_text or len(field_text) < MIN_CHARS:
             continue
         verdict = loop_detector.judge_tool_arg(field_text)
-        if not verdict.block:
+        if not verdict.ask:
             continue
         inc = {
             "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -96,15 +107,20 @@ def on_pre_tool_call(tool_name: str = "", args=None, session_id: str = "", **kw)
             "detail": verdict.detail,
             "arg_chars": len(field_text),
             "metrics": verdict.metrics,
-            "action": "blocked",
+            "action": "approve_requested",
+            # The hook returns a directive and is not called again with the user's answer, so
+            # the outcome is genuinely unknown here. Recorded as such rather than guessed.
+            "approval_outcome": "not observable from this hook",
             "thresholds": loop_detector.TOOL_ARG_THRESHOLDS,
         }
         with _lock:
             _write_incident(inc)
         return {
-            "action": "block",
-            "message": _BLOCK_MESSAGE.format(
-                reason=verdict.reason, detail=verdict.detail, env=ALLOW_ENV),
+            "action": "approve",
+            "message": _ASK_MESSAGE.format(
+                reason=verdict.reason, detail=verdict.detail, tool=tool_name,
+                env=ALLOW_ENV),
+            "rule_key": f"{RULE_KEY_PREFIX}:{tool_name}" if tool_name else RULE_KEY_PREFIX,
         }
 
     return None

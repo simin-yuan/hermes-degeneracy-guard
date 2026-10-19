@@ -13,7 +13,7 @@ creates the directory, so a path cached at import time would write one profile's
 another's.
 
 Incident file names are unique on purpose: an earlier version stamped them to the second,
-and four blocked calls inside one second left only two files behind.
+and four incidents inside one second left only two files behind.
 """
 
 from __future__ import annotations

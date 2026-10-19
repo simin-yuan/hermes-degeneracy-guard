@@ -4,18 +4,27 @@ A model in a repeat loop can say "I am repeating" and still cannot stop. That is
 premise of this plugin: the breaker runs outside the model, on the stream and on the way
 out, instead of trusting a self-report.
 
-Hook capability boundary (verified against the Hermes plugin API):
+Hook capability boundary (verified against the Hermes plugin API at 22063fc0):
 - ``on_stream_delta``      sees every chunk but is documented as off the token path and
                            unable to transform the stream -> detect in real time, cannot
                            abort.
 - ``transform_llm_output`` can return a replacement string (first non-None wins) ->
                            replaces already-degenerate output before it reaches the
                            session, but does not stop generation.
+- ``pre_tool_call``        can return ``{"action": "block", ...}`` to refuse a call, or
+                           ``{"action": "approve", "message", "rule_key"}`` to send it to
+                           the human-approval gate (``hermes_cli/plugins.py:1979-2031``,
+                           ``_resolve_block_from_details`` at ``:2059-2088``). A gate that is
+                           denied, errors or times out refuses the call, so the fallback is
+                           safe when nobody is watching.
 - ``post_llm_call``        runs after the turn -> record only.
 
 No plugin hook can abort a generation that is in progress. A real abort needs an external
 breaker signal checked inside the core chunk loop. Until then this plugin does the part it
 can, and records the missing capability in every incident it writes.
+
+Tool arguments: the guard asks rather than refuses, because content alone cannot separate a
+deliberately repeated payload from a stuck loop. See ``tool_arg_guard``.
 
 Loading: Hermes imports a directory plugin as a package (``hermes_plugins.<slug>``), so the
 sibling modules are imported relatively. Importing them by bare name would put ``paths`` and

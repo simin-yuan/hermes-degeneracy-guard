@@ -8,7 +8,8 @@ Two jobs, deliberately kept apart:
   a JSON array, a matrix or a CSV export may repeat on purpose, and Hermes core lets such a
   call through on purpose (``agent/chat_completion_helpers.py``: "a provider-confirmed call
   may legitimately write repetitive data"). The tool-argument rule therefore asks a second
-  question before it blocks: does the repetition look like data at all?
+  question first: does the repetition look like data at all? And a third: content cannot
+  separate intent from pathology, so instead of refusing, the verdict is "ask the user".
 
 Why a detector exists at all: a model inside a repeat loop can report that it is repeating
 and still cannot stop. Self-report is not self-control, so the check runs outside the model.
@@ -39,24 +40,21 @@ FROZEN_THRESHOLDS = {
 }
 
 # Frozen thresholds for tool arguments. Every number below is backed by the committed
-# corpus under tests/corpus/ (27 legitimate payloads, 10 degeneracy samples); the measured
-# margins are quoted in README.md and re-checked by tests/test_tool_arg_rule.py.
+# corpus under tests/corpus/ and by a hold-out set that was written without sight of these
+# rules (numbers in README.md); tests/test_tool_arg_rule.py re-checks the corpus.
 TOOL_ARG_THRESHOLDS = {
     # Below this size a repetition cannot carry a loop far enough to matter.
     "min_chars": 200,
-    # Repetition scale that blocks a payload with no data-like structure. Chosen above the
-    # largest legitimate repetition seen in a payload without a data shape (17 identical
-    # lines) and below the smallest degeneracy sample (25 repetitions).
-    "min_reps": 20,
-    "min_identical_run": 20,
+    # Below this many non-empty lines the payload is a snippet, not a body of output.
+    "min_lines": 12,
+    # Repetition scale that is worth a human's attention when the payload has no data shape:
+    # one line repeated, or a short block repeated.
+    "min_reps": 18,
+    "min_identical_run": 18,
     # Share of non-empty lines that must sit inside the repeated block: a document that
-    # quotes the same line 20 times and then continues is not a loop.
+    # quotes the same line 18 times and then continues is not a loop.
     "min_share": 0.6,
     "max_period": 20,
-    # A structured payload is exempt while it has variety; below this many distinct lines
-    # the "structure" is itself the repetition (a model emitting the same code line 60
-    # times is not writing structured data).
-    "min_structured_variety": 5,
     # Upper bound on the text scanned per call, so a pathological argument cannot turn the
     # guard into a denial of service.
     "scan_cap_chars": 1_000_000,
@@ -74,8 +72,8 @@ class Verdict:
 
 @dataclass(frozen=True)
 class ToolArgVerdict:
-    block: bool
-    reason: str          # "" | "identical_run" | "periodic_repeat"
+    ask: bool            # True = hand this call to the human-approval gate
+    reason: str          # "" | "identical_run" | "periodic_repeat" | "short_loop"
     detail: str
     metrics: dict
 
@@ -153,24 +151,54 @@ def check_text(text: str, thresholds: dict | None = None) -> Verdict:
 
 
 # -- Tool-argument rule -----------------------------------------------------------------
+# Recognisers for "this payload has a data shape". They answer ONE question: could a person
+# have written this on purpose? Anything recognised here is left alone — never blocked, never
+# escalated — because a table, a matrix, a SQL script or a log tail may repeat by design.
 _SEPARATOR = re.compile(r"^[-=_*~#+·—\s]+$")
-_NUMERIC_ROW = re.compile(r"^[\[\]{}()0-9.,;\-+eE\s]+$")
-_HTML_ROW = re.compile(r"<\s*(tr|td|th|option|li|rect|circle|line|path)\b", re.I)
+_NUMERIC_ROW = re.compile(r"^[\[\]{}()0-9.,;:\-+eE\s*/%=]+$")
 _TABLE_ROW = re.compile(r"^\|.*\|$")
-_YAML_ITEM = re.compile(r"^\s*(?:-\s+\S|[\w.-]+\s*:\s*\S)")
-_CHECKLIST = re.compile(r"^\s*[-*]\s+\[[ xX]\]\s")
-_LOG_LINE = re.compile(r"^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}")
-_CODE_LINE = re.compile(r"[;,{}()\[\]]\s*$")
-_WORD = re.compile(r"\S+")
+_CHECKLIST = re.compile(r"^[-*+]\s+\[[ xX-]\]")
+_YAML_ITEM = re.compile(r"^-\s|^-\s*$")
+_YAML_KV = re.compile(r"^[^\s:#{}\[\]\"';,][^:#{}\[\]\"';,]*:\s*(\S.*)?$")
+_TOML_TABLE = re.compile(r"^\[\[?[A-Za-z0-9_.\"-]+\]?\]$")
+_TOML_KV = re.compile(
+    r'^[A-Za-z0-9_.\-]+\s*=\s*("[^"]*"|\'[^\']*\'|\[[^\]]*\]|\{[^}]*\}|[^\s+\-*/=]{0,120})$')
+_XML_LINE = re.compile(
+    r"^(</?[A-Za-z][\w:.-]*(\s[^<>]*)?/?>(</?[A-Za-z][\w:.-]*(\s[^<>]*)?/?>)*|<!--.*-->)$")
+_SQL_LINE = re.compile(
+    r"^(insert|update|delete|select|create|alter|drop|with|values|replace|commit)\b", re.I)
+_LOG_PREFIX = re.compile(
+    r"^(\[?\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}|\[?\d{1,2}:\d{2}:\d{2}|[A-Z][a-z]{2}\s+\d{1,2}\s+\d{2}:\d{2})")
+_LOG_LEVEL = re.compile(r"\b(TRACE|DEBUG|INFO|NOTICE|WARN|WARNING|ERROR|FATAL|CRITICAL)\b")
+# A code *element* (a list/dict entry ending in a comma, a bracket-only line) is data; a code
+# *statement* is not. "return f()  # recursion fixed" matches neither, which is the point.
+_CODE_ELEMENT = re.compile(r"^[\[\]{}(),;]*\s*$|,\s*$")
+_KIND_MIN_RATIO = 0.6
+_PROSE_END = ".!?。！？…；;:"
+
+
+def _is_prose_line(line: str) -> bool:
+    """True when a line reads like a sentence rather than a data record.
+
+    Data has grammar (delimiters, tags, terminators); prose has sentences. This is the only
+    signal the guard trusts when it decides whether repetition is worth a human's attention.
+    """
+    s = line.strip()
+    if not s:
+        return False
+    if s[-1] in _PROSE_END:
+        return True
+    if re.search(r"[;,{}()\[\]=<>|@$\\]", s):
+        return False
+    words = s.split()
+    if len(words) <= 4 and sum(1 for ch in s if ch.isalpha() or ord(ch) > 0x2E80) >= len(s) * 0.6:
+        return True
+    return False
 
 
 def _detect_structure(lines: Sequence[str]) -> str:
-    """Name the data-like shape of the payload, or "" when it has none.
-
-    Deliberately conservative: anything recognised here is *excused* from the block rule
-    only when it also carries variety (see judge_tool_arg).
-    """
-    body = [x for x in lines if x]
+    """Name the data-like shape of the payload, or "" when it has none."""
+    body = [x.strip() for x in lines if x.strip()]
     if len(body) < 3:
         return ""
     text = "\n".join(lines)
@@ -179,35 +207,49 @@ def _detect_structure(lines: Sequence[str]) -> str:
         return "json"
     except Exception:
         pass
-    if all(json_line.startswith("{") and json_line.endswith("}") for json_line in body[:5]):
+    head = body[:20]
+    if head and all(x.startswith("{") and x.endswith("}") for x in head):
         try:
-            for json_line in body[:20]:
-                json.loads(json_line)
+            for x in head:
+                json.loads(x)
             return "jsonl"
         except Exception:
             pass
-    if sum(1 for x in body if _TABLE_ROW.match(x)) >= 3:
-        return "markdown_table"
-    if sum(1 for x in body if _HTML_ROW.search(x)) >= 3:
-        return "html_rows"
-    if sum(1 for x in body if _NUMERIC_ROW.match(x)) >= 3:
+
+    n = len(body)
+    checks = (
+        ("markdown_table", _TABLE_ROW.match),
+        ("checklist", _CHECKLIST.match),
+        ("xml", _XML_LINE.match),
+        ("sql", _SQL_LINE.match),
+        ("toml_table", _TOML_TABLE.match),
+        ("toml_kv", _TOML_KV.match),
+        ("yaml", lambda x: bool(_YAML_ITEM.match(x) or _YAML_KV.match(x))),
+        ("log", lambda x: bool(_LOG_PREFIX.match(x) or _LOG_LEVEL.search(x))),
+    )
+    for name, pred in checks:
+        hits = sum(1 for x in body if pred(x))
+        if hits >= 3 and hits >= n * _KIND_MIN_RATIO:
+            return name
+    hits = sum(1 for x in body if _NUMERIC_ROW.match(x) and any(c.isdigit() for c in x))
+    if hits >= 3 and hits >= n * _KIND_MIN_RATIO:
         return "numeric_rows"
-    if sum(1 for x in body if _SEPARATOR.match(x)) >= 3:
+    hits = sum(1 for x in body if _SEPARATOR.match(x))
+    if hits >= 3 and hits >= n * _KIND_MIN_RATIO:
         return "separator"
-    if sum(1 for x in body if _CHECKLIST.match(x)) >= 3:
-        return "checklist"
+    # Delimited records: the same field count on most lines (a CSV/TSV export). One delimiter
+    # per line is not enough — prose with a comma is not a table — and a table whose rows are
+    # all the same row is not a table either, it is the loop wearing a table's clothes.
     for delim in (",", ";", "\t", "|"):
         rows = [x for x in body if delim in x]
-        if len(rows) >= 3:
-            counts = {x.count(delim) for x in rows}
-            if len(counts) == 1 and counts.pop() >= 1:
+        if len(rows) >= 3 and len(rows) >= n * _KIND_MIN_RATIO:
+            if len({x.count(delim) for x in rows}) == 1 and len(set(rows)) >= 2:
                 return "delimited"
-    if sum(1 for x in body if _YAML_ITEM.match(x)) >= max(3, len(body) // 2):
-        return "yaml"
-    if sum(1 for x in body if _LOG_LINE.match(x)) >= 3:
-        return "log"
-    if sum(1 for x in body if _CODE_LINE.search(x)) >= max(3, len(body) // 2):
-        return "code"
+    # Code *elements* (list/dict entries ending in a comma, bracket-only lines) are data.
+    # Code *statements* are not: a model repeating `count += 1` fifty times is a loop.
+    hits = sum(1 for x in body if _CODE_ELEMENT.search(x))
+    if hits >= 3 and hits >= n * _KIND_MIN_RATIO:
+        return "code_elements"
     return ""
 
 
@@ -217,12 +259,13 @@ class _Repetition:
     reps: int
     lines: int          # period * reps
     distinct: int       # distinct lines inside the repeated block
+    block: tuple        # the repeated unit itself
 
 
 def _max_repetition(lines: Sequence[str], max_period: int) -> _Repetition:
     """Largest periodic block (by line count) in the payload."""
     n = len(lines)
-    best = _Repetition(0, 1, 0, 0)
+    best = _Repetition(0, 1, 0, 0, ())
     for p in range(1, max_period + 1):
         i = 0
         while i + p <= n:
@@ -236,22 +279,25 @@ def _max_repetition(lines: Sequence[str], max_period: int) -> _Repetition:
                 reps += 1
                 j += p
             if reps * p > best.lines:
-                best = _Repetition(p, reps, reps * p, len(set(block)))
+                best = _Repetition(p, reps, reps * p, len(set(block)), tuple(block))
             i = j if reps > 1 else i + 1
     return best
 
 
 def judge_tool_arg(text: str, thresholds: dict | None = None) -> ToolArgVerdict:
-    """Decide whether a tool argument is degenerate output rather than data.
+    """Decide whether a tool argument deserves a human's attention before it runs.
+
+    This does not decide right and wrong, because content alone cannot: a thousand-row
+    zero matrix may be data, and the same thousand rows may be a model stuck in a loop.
+    Only the user knows. So the rule asks a narrow question — "is this repetition carrying
+    nothing but sentences?" — and if so hands the call to the approval gate.
 
     The rule, in order:
-    1. Too small to matter -> allow.
-    2. Repetition carried by a data-like shape with variety -> allow (this is the case
-       Hermes core explicitly allows through).
-    3. >= min_identical_run identical consecutive lines -> block.
-    4. a block of period <= max_period repeated >= min_reps times and covering at least
-       min_share of the non-empty lines -> block.
-    5. otherwise -> allow.
+    1. Too small / too few lines to matter -> allow.
+    2. The payload has a data shape (table, matrix, SQL, YAML/TOML, XML, log, checklist,
+       delimited records, code literals) -> allow. Repetition there is expected.
+    3. No repetition worth mentioning -> allow.
+    4. The repeating unit reads as prose -> escalate. Otherwise -> allow.
     """
     t = {**TOOL_ARG_THRESHOLDS, **(thresholds or {})}
     if not text or len(text) < t["min_chars"]:
@@ -262,8 +308,8 @@ def judge_tool_arg(text: str, thresholds: dict | None = None) -> ToolArgVerdict:
 
     norm = [_normalize(x) for x in scanned.splitlines()]
     body = [x for x in norm if x]
-    if not body:
-        return ToolArgVerdict(False, "", "no content", {"chars": len(text)})
+    if len(body) < t["min_lines"]:
+        return ToolArgVerdict(False, "", "too few lines", {"chars": len(text), "lines": len(body)})
 
     run = best_run = 1
     for i in range(1, len(body)):
@@ -273,7 +319,6 @@ def judge_tool_arg(text: str, thresholds: dict | None = None) -> ToolArgVerdict:
     rep = _max_repetition(body, t["max_period"])
     share = rep.lines / len(body)
     kind = _detect_structure(scanned.splitlines())
-    variety = rep.distinct if rep.lines else len(set(body))
 
     metrics = {
         "chars": len(text),
@@ -285,30 +330,28 @@ def judge_tool_arg(text: str, thresholds: dict | None = None) -> ToolArgVerdict:
         "rep_lines": rep.lines,
         "share": round(share, 3),
         "structure": kind or "none",
-        "structure_variety": variety,
     }
 
-    if kind and variety >= t["min_structured_variety"]:
-        return ToolArgVerdict(False, "", f"structured payload ({kind})", metrics)
-    if kind in ("json", "markdown_table", "html_rows", "numeric_rows", "separator"):
-        return ToolArgVerdict(False, "", f"structured payload ({kind})", metrics)
-    if kind == "delimited" and rep.distinct >= 2:
-        return ToolArgVerdict(False, "", "delimited payload with varied rows", metrics)
+    if kind:
+        metrics["prose_share"] = 0.0
+        return ToolArgVerdict(False, "", f"data-shaped payload ({kind})", metrics)
 
-    if best_run >= t["min_identical_run"]:
+    run_hit = best_run >= t["min_identical_run"]
+    unit = (body[-1],) if run_hit else rep.block
+    prose = sum(1 for x in unit if _is_prose_line(x)) / max(1, len(unit))
+    metrics["prose_share"] = round(prose, 3)
+    if not run_hit and not (rep.reps >= t["min_reps"] and share >= t["min_share"]):
+        return ToolArgVerdict(False, "", "repetition below the ask threshold", metrics)
+
+    if run_hit:
         return ToolArgVerdict(
             True, "identical_run",
-            f"{best_run} consecutive identical lines in a {len(body)}-line argument",
-            metrics,
-        )
-    if rep.reps >= t["min_reps"] and share >= t["min_share"]:
-        return ToolArgVerdict(
-            True, "periodic_repeat",
-            f"{rep.period}-line block repeated {rep.reps} times "
-            f"({int(share * 100)}% of the argument, structure: {kind or 'none'})",
-            metrics,
-        )
-    return ToolArgVerdict(False, "", "repetition below the block threshold", metrics)
+            f"{best_run} consecutive identical sentences in a {len(body)}-line argument: "
+            f"{body[-1][:60]!r}", metrics)
+    return ToolArgVerdict(
+        True, "periodic_repeat",
+        f"{rep.period}-line block repeated {rep.reps} times "
+        f"({int(share * 100)}% of a {len(body)}-line argument): {unit[0][:60]!r}", metrics)
 
 
 def count_metrics(text: str) -> dict:
