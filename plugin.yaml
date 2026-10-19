@@ -1,7 +1,8 @@
 name: degeneracy-guard
-version: 1.1.0
-description: Detects repetition loops in model output, blocks tool calls with degenerate arguments, replaces flagged output with a short notice, records incidents locally and warns when a session grows too long.
+version: 1.2.0
+description: Detects repetition loops in model output, blocks tool calls whose arguments have degenerated into a loop, replaces flagged output with a short notice, records incidents locally and warns when a session grows too long.
 author: "Simin (Simon) Yuan"
+requires_hermes: ">=0.22.2"
 provides_hooks:
   - on_stream_delta
   - transform_llm_output

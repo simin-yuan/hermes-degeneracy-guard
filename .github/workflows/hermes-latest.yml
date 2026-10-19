@@ -48,4 +48,4 @@ jobs:
       - name: pytest (no network)
         run: |
           sudo unshare --net -- sudo -u "$USER" env PATH="$PATH" HOME="$HOME" \
-            "$RUNNER_TEMP/hermes-venv/bin/python" -m pytest -v -rs --ignore=.hermes-agent
+            "$RUNNER_TEMP/hermes-venv/bin/python" -m pytest tests -v -rs

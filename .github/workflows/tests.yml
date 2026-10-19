@@ -43,7 +43,7 @@ jobs:
         run: |
           sudo unshare --net -- sudo -u "$USER" env PATH="$PATH" HOME="$HOME" \
             PYTHONPATH="$GITHUB_WORKSPACE/.hermes-agent" \
-            python -m pytest -v -rs --ignore=.hermes-agent
+            python -m pytest tests -v -rs
 
   # Hermes' own plugin checks. Its CLI dependencies need Python 3.14.
   hermes-tools:
