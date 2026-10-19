@@ -91,7 +91,7 @@ The corpus above is also the set the rules were built against, so it cannot show
 generalise. A second set was written independently — 40 legitimate payloads (SQL, CSV, TSV, JSON,
 JSONL, YAML, TOML, INI, env, properties, proto, TF, HTML, XML, SVG, CSS, JS, Python, diff, hexdump,
 base64, license text, changelog, runbook, fixed-width table, ASCII art, box drawing) and 13
-degeneracy samples — by an assistant that never saw `loop_detector.py` or this README. It was scored
+degeneracy samples — by someone who never saw `loop_detector.py` or this README. It was scored
 in one pass against the finished rules, and no rule was changed afterwards.
 
 | Set | Files | Asked | Left alone |
@@ -99,7 +99,9 @@ in one pass against the finished rules, and no rule was changed afterwards.
 | legitimate | 40 | 0 | 40 |
 | degeneracy | 13 | 6 | 7 |
 
-The seven misses are worth naming, because they define what this check cannot do:
+A second outside set, written later by the project's reviewer and scored once, was harder: of 12 legitimate repetitive payloads (Dockerfile RUN lines, shell echo lines, INI sections, reStructuredText and LaTeX tables, a hex dump, and others), 6 would have triggered a confirmation; of 5 degeneracy samples, 3 were caught (missed: a list item repeated 40 times, and a numbered four-step cycle). A confirmation is one prompt per tool, and "always" stops it for that tool, so these numbers are a cost to read, not a failure mode.
+
+The seven misses in the first set are worth naming, because they define what this check cannot do:
 
 - `endless_list.txt` — `- item` repeated 68 times. A markdown list, so it is exempt; the same
   payload written on purpose is a legitimate checklist (it is in the committed corpus as
