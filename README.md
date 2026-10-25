@@ -268,4 +268,4 @@ No network calls, shell commands, background processes, telemetry or credentials
 
 Apache-2.0. See `LICENSE` and `NOTICE`.
 
-© 2026 Simin (Simon) Yuan — ORCID [0009-0002-6843-3390](https://orcid.org/0009-0002-6843-3390) · [github.com/simin-yuan](https://github.com/simin-yuan).
+© 2026 Simin Yuan — ORCID [0009-0002-6843-3390](https://orcid.org/0009-0002-6843-3390) · [github.com/simin-yuan](https://github.com/simin-yuan).

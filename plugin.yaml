@@ -1,7 +1,7 @@
 name: degeneracy-guard
 version: 1.3.0
 description: Detects repetition loops in model output, replaces flagged output with a short notice, asks the user to confirm tool calls whose arguments look like a loop (a denial or a timeout refuses the call), records incidents locally and warns when a session grows too long.
-author: "Simin (Simon) Yuan"
+author: "Simin Yuan"
 requires_hermes: ">=0.22.2"
 provides_hooks:
   - on_stream_delta
