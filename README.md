@@ -153,12 +153,27 @@ incident record; the difference is whether the guard reaches the session.
 | `observe` | yes | no | no |
 | `act` | yes | yes | yes, via Hermes' approval gate |
 
-Which one you get without setting anything is decided by evidence, not by the version number:
+Which one you get without setting anything is decided once, from the install itself, and then written
+down in `mode.json` in the plugin's data directory:
 
-- **fresh install** — nothing has ever been recorded, so the guard starts in `observe`. Watch what it
-  flags on your own traffic for a day before you hand it a veto.
-- **install that has recorded an incident before** — keeps `act`. An upgrade that silently downgraded
-  the guard would leave you protected only until you read the release notes.
+- **the plugin's data directory did not exist when the package loaded** — a first install. It starts in
+  `observe`: watch what it flags on your own traffic for a day before you hand it a veto.
+- **the directory was already there** — the plugin has run on this machine before, so it keeps `act`.
+  An upgrade that silently downgraded the guard would keep the user believing it was still there.
+
+The one install this cannot tell apart: one that has been loaded and has never written anything at all
+(no incident, no session-length counter) has no directory on disk, so it reads as a first install.
+Nothing there separates it from a plugin that was never loaded, and guessing the other way would hand
+a veto to every new install on its first turn. The mode is visible either way: an install in `observe`
+says so in every incident it writes.
+
+The decision is pinned rather than recomputed. 1.4.0 recomputed it from the incident log, which meant an
+install that had been enforcing for weeks without ever catching anything looked like a first install and
+would have been switched off by the upgrade to 1.4.0 — the one population that had nothing to show for
+being protected. See `CHANGELOG.md`.
+
+`DEGENERACY_GUARD_MODE` still overrides both directions and is never pinned; to move a pinned install,
+set it, or delete `mode.json` and set the mode you want.
 
 Incidents written in `observe` mode say so: `"action": "observed"`, `"approval_outcome": "not requested
 (observe mode)"`, and for output that would have been replaced, `"would_replace_chars"`. A reader can

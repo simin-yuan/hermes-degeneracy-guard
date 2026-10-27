@@ -44,6 +44,30 @@ def incident_dir() -> Path:
     return state_root() / "incidents"
 
 
+def state_root_path() -> Path:
+    """Where this install keeps its state, resolved without creating the directory.
+
+    ``state_root()`` delegates to ``plugin_data_dir()``, which creates the directory as a side
+    effect, so it cannot answer "did this exist before I arrived". This resolves the same location
+    without the mkdir — the difference between "a first install" and "an install that has been
+    running and has never flagged anything", which is exactly what decides the guard's mode, and
+    the path a pin file is looked for at.
+    """
+    override = os.environ.get("DEGENERACY_GUARD_HOME")
+    if override:
+        return Path(override).expanduser()
+    try:
+        from hermes_constants import get_hermes_home
+    except ImportError:
+        return Path.home() / ".degeneracy-guard"
+    return get_hermes_home() / "plugin-data" / PLUGIN_NAME
+
+
+def state_root_exists() -> bool:
+    """Whether this install's data directory is already on disk, without creating it."""
+    return state_root_path().exists()
+
+
 def incident_path(tag: str = "incident") -> Path:
     """Return a collision-free incident path, creating the directory if needed.
 
