@@ -251,6 +251,11 @@ def test_real_hermes_plugin_manager_asks_then_blocks_on_denial(tmp_path):
     )
     env = {**os.environ, "HERMES_HOME": str(home)}
     env.pop("DEGENERACY_GUARD_HOME", None)
+    # A fresh install starts in observe, so a reload of this plugin here would return no
+    # directive at all. This test is about the enforcement half of the contract, so it asks
+    # for it the way a user does - the documented override - and leaves the "which mode does
+    # an install get" question to tests/test_mode.py.
+    env["DEGENERACY_GUARD_MODE"] = "act"
     out = subprocess.run([sys.executable, "-P", "-c", code], cwd=tmp_path, env=env,
                          capture_output=True, text=True, timeout=300)
     assert out.returncode == 0, out.stderr
