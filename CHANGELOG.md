@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.4.2 — 2026-10-28
+
+**Tests and docs only. The plugin behaves exactly as 1.4.1 does.**
+
+1.4.0 and 1.4.1 shipped with CI red: `tests/test_hermes_contract.py` drives Hermes' own approval
+gate, but a fresh install now starts in `observe`, so reloading the plugin in a clean `HERMES_HOME`
+returns no directive and the test failed on `action is None`. The test now sets
+`DEGENERACY_GUARD_MODE=act` - the documented override - because the enforcement path is what it is
+there to check; which mode an install gets stays covered by `tests/test_mode.py`.
+
+`plugin.yaml` also described the 1.4.0 rule for an existing install (`already recorded an incident`)
+rather than the 1.4.1 one (`its data directory existed before this load`). Same behaviour, wrong
+words, so they were replaced.
+
+Tags v1.4.0 and v1.4.1 stay where they are.
+
+Tests: 51 passed, 0 skipped (hermes-agent importable).
+
 ## 1.4.1 — 2026-10-28
 
 **Fixed: 1.4.0 could turn the guard off on upgrade, without saying so.**
