@@ -42,7 +42,8 @@ def test_stream_state_latches_once():
     assert saw == 1
 
 
-def test_tool_guard_asks_about_degenerate_arguments():
+def test_tool_guard_asks_about_degenerate_arguments(monkeypatch):
+    monkeypatch.setenv("DEGENERACY_GUARD_MODE", "act")
     r = tag.on_pre_tool_call(tool_name="write_file",
                              args={"content": "\n".join(["same line"] * 30)})
     assert r and r["action"] == "approve"

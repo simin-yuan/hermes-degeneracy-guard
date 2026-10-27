@@ -143,6 +143,30 @@ is the point — an escape hatch that silently changed thresholds would make inc
 For a one-off payload, the "always" answer in the prompt is the narrower option and needs no
 environment change.
 
+## Modes: observe, or act
+
+`DEGENERACY_GUARD_MODE` takes `observe` or `act`. Both run the same detectors and write the same
+incident record; the difference is whether the guard reaches the session.
+
+| | Detection + record | Replaces flagged output | Asks about a loop-shaped tool call |
+|---|---|---|---|
+| `observe` | yes | no | no |
+| `act` | yes | yes | yes, via Hermes' approval gate |
+
+Which one you get without setting anything is decided by evidence, not by the version number:
+
+- **fresh install** — nothing has ever been recorded, so the guard starts in `observe`. Watch what it
+  flags on your own traffic for a day before you hand it a veto.
+- **install that has recorded an incident before** — keeps `act`. An upgrade that silently downgraded
+  the guard would leave you protected only until you read the release notes.
+
+Incidents written in `observe` mode say so: `"action": "observed"`, `"approval_outcome": "not requested
+(observe mode)"`, and for output that would have been replaced, `"would_replace_chars"`. A reader can
+always tell "would have asked" from "asked".
+
+This plugin follows the [Hermes plugin verdict convention v0.1](https://github.com/simin-yuan/hermes-provenance-gate/blob/main/docs/verdict-convention.md):
+`rule_key` is `degeneracy-guard:<tool>`, so answering "always" stops the prompt for that tool only.
+
 ## What this plugin does not do
 
 It does not stop a generation in progress: no plugin hook can abort the stream, so that cut remains
@@ -262,7 +286,7 @@ adapters around it.
 
 ## Disclosure
 
-No network calls, shell commands, background processes, telemetry or credentials. The plugin reads only the hook payloads Hermes passes to it. A tool call whose arguments look like a repetition loop is **not refused by the plugin**: it is forwarded to Hermes' human-approval gate, and the call is refused when the user denies it, when the gate errors, or when the answer times out — including cron, where `approvals.cron_mode` defaults to `deny`. Approving runs the call, and choosing "always" stops the prompt for that tool. It writes JSON incident records and a small session-length counter under its own state directory: `<HERMES_HOME>/plugin-data/degeneracy-guard/` inside Hermes, `DEGENERACY_GUARD_HOME` when set, or `~/.degeneracy-guard` outside Hermes. A stream-side incident record keeps the last 800 characters of the flagged output; a tool-argument record keeps the tool name, session id, reason and argument length, not the argument text. These files stay on the local machine.
+No network calls, shell commands, background processes, telemetry or credentials. The plugin reads only the hook payloads Hermes passes to it. A tool call whose arguments look like a repetition loop is **not refused by the plugin**: in `act` mode it is forwarded to Hermes' human-approval gate (in `observe` mode nothing is forwarded and the call runs), and the call is refused when the user denies it, when the gate errors, or when the answer times out — including cron, where `approvals.cron_mode` defaults to `deny`. Approving runs the call, and choosing "always" stops the prompt for that tool. It writes JSON incident records and a small session-length counter under its own state directory: `<HERMES_HOME>/plugin-data/degeneracy-guard/` inside Hermes, `DEGENERACY_GUARD_HOME` when set, or `~/.degeneracy-guard` outside Hermes. A stream-side incident record keeps the last 800 characters of the flagged output; a tool-argument record keeps the tool name, session id, reason and argument length, not the argument text. These files stay on the local machine.
 
 ## License
 

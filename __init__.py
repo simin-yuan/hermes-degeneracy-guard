@@ -40,6 +40,7 @@ import threading
 import time
 
 from . import loop_detector
+from . import mode
 from .paths import incident_path
 
 logger = logging.getLogger(__name__)
@@ -116,6 +117,16 @@ def transform_llm_output(response_text=None, **kw):
     with _lock:
         inc = _flagged.get(key)
         if inc is None:
+            return None
+        if mode.observes():
+            # Observe mode runs the same detection and keeps the same record; the only thing it does
+            # not do is reach the session. The label makes the difference legible later.
+            inc["action"] = "observed"
+            inc["observed_at"] = "transform_llm_output"
+            inc["would_replace_chars"] = len(response_text or "")
+            _write_incident(inc)
+            _flagged.pop(key, None)
+            logger.warning("degeneracy-guard: observe mode, left degenerate output in place for %s", key)
             return None
         inc["replaced_by_transform_llm_output"] = True
         inc["original_chars"] = len(response_text or "")

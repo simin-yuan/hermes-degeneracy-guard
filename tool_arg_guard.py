@@ -26,6 +26,7 @@ import threading
 import time
 
 from . import loop_detector
+from . import mode
 from .paths import incident_path
 
 logger = logging.getLogger(__name__)
@@ -113,6 +114,15 @@ def on_pre_tool_call(tool_name: str = "", args=None, session_id: str = "", **kw)
             "approval_outcome": "not observable from this hook",
             "thresholds": loop_detector.TOOL_ARG_THRESHOLDS,
         }
+        if mode.observes():
+            # Same detection, same record, no directive: the user is not interrupted, and the file
+            # says so instead of claiming an approval was requested.
+            inc["action"] = "observed"
+            inc["approval_outcome"] = "not requested (observe mode)"
+            with _lock:
+                _write_incident(inc)
+            logger.warning("degeneracy-guard: observe mode, would have asked about %s", tool_name)
+            return None
         with _lock:
             _write_incident(inc)
         return {

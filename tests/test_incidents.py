@@ -17,6 +17,7 @@ def _payload():
 
 def test_four_asks_in_one_second_leave_four_files(tmp_path, monkeypatch):
     monkeypatch.setenv("DEGENERACY_GUARD_HOME", str(tmp_path))
+    monkeypatch.setenv("DEGENERACY_GUARD_MODE", "act")
     for _ in range(4):
         assert tag.on_pre_tool_call(tool_name="write_file", args=_payload())["action"] == "approve"
     files = list((tmp_path / "incidents").glob("*.json"))
