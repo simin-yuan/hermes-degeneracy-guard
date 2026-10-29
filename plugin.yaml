@@ -1,5 +1,5 @@
 name: degeneracy-guard
-version: 1.4.2
+version: 1.5.0
 description: Detects repetition loops in model output, replaces flagged output with a short notice, asks the user to confirm tool calls whose arguments look like a loop (a denial or a timeout refuses the call), records incidents locally and warns when a session grows too long. Two modes, DEGENERACY_GUARD_MODE=observe|act — a fresh install starts in observe, which runs the same detection and writes the same incident but replaces nothing and asks nothing; an install whose data directory existed before this load keeps act across upgrades, so a protection the user chose is never silently removed. The same two modes are also reachable through HERMES_GUARD_MODE, the single key this family of plugins shares — DEGENERACY_GUARD_MODE wins when both are set, and its `ask` spelling lands on act here because the act path already goes through the approval gate. Follows the Hermes plugin verdict convention v0.1 (rule_key=degeneracy-guard:<tool>).
 author: "Simin Yuan"
 requires_hermes: ">=0.22.2"

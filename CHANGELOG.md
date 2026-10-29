@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.5.0 — 2026-10-30
+
+**New: `HERMES_GUARD_MODE` — one key that turns this guard and its two siblings down together.**
+
+`DEGENERACY_GUARD_MODE` is untouched: it keeps its own two words (`observe` / `act`) and its
+precedence, so no existing configuration behaves differently after the upgrade. `HERMES_GUARD_MODE`
+is read only when that key says nothing, and it does not move the pin — the pin records what this
+install decided on its own; an operator's setting is a different question, answered fresh on every
+read.
+
+An explicit shared `observe` does win over a pinned `act`. Without that, an install that has enforced
+for months has no way to be turned down except by finding the pin file first — the one case the
+shared key exists to solve.
+
+`ask` is accepted from the shared key and lands on `act` here, because this plugin's act path already
+goes through the approval gate: the two names differ only in what happens after a timeout, and this
+plugin refuses there by design. `describe()` says so in as many words instead of reporting `act` as
+if that were what the shared key asked for.
+
+The README now opens with a `Modes` table written verbatim the same in `provenance-gate` and
+`skill-lineage`, so one look says what posture the whole family is in at that moment.
+
+Tests: 9 added in `tests/test_shared_mode.py`, including the pinned-`act`-versus-shared-`observe`
+case and the `describe()` wording. Full suite: 59 passed, 1 skipped.
+
 ## 1.4.2 — 2026-10-28
 
 **Tests and docs only. The plugin behaves exactly as 1.4.1 does.**

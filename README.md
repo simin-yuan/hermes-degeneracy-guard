@@ -25,6 +25,25 @@ payload from a model stuck in a loop — a thousand-row zero matrix is data in o
 pathology in the next, and only the user knows which. So the guard now raises the question instead
 of answering it, and the cost of a wrong guess drops from a failed write to one click.
 
+## Modes
+
+`observe` records; `act` enforces. One key sets that for the whole family, and each plugin still
+answers to its own key first.
+
+| Plugin | Own key | Shared key `HERMES_GUARD_MODE` | In `observe` | In `act` |
+|---|---|---|---|---|
+| degeneracy-guard | `DEGENERACY_GUARD_MODE` — `observe` \| `act` | `observe` / `act` | same detection and incident record; replaces nothing, asks nothing | flagged output replaced with a notice; a loop-shaped tool call goes to the approval gate |
+| provenance-gate | `PROVENANCE_GATE_MODE` — `observe` \| `ask` \| `block` | `observe` / `act` (= `block`); `ask` stays `ask` | writes recorded as `would_block`, nothing refused | the write is refused with instructions |
+| skill-lineage | none | **no effect here** — records only, nothing to refuse | records every skill write | records every skill write |
+
+Precedence: a plugin's own key wins, `HERMES_GUARD_MODE` is the fallback, and with neither set each
+plugin keeps its own default. A spelling a key does not recognise is not an opinion — it falls
+through to the next source rather than being guessed at, so an empty or misspelled setting never
+changes a posture on its own.
+
+This plugin is the first row. Which default a given machine gets, and what an `observe` incident
+records, are in [Mode details](#mode-details).
+
 ## What it does
 
 | Hook | Can it observe? | Can it change the turn? | What this plugin does there |
@@ -143,7 +162,7 @@ is the point — an escape hatch that silently changed thresholds would make inc
 For a one-off payload, the "always" answer in the prompt is the narrower option and needs no
 environment change.
 
-## Modes: observe, or act
+## Mode details
 
 `DEGENERACY_GUARD_MODE` takes `observe` or `act`. Both run the same detectors and write the same
 incident record; the difference is whether the guard reaches the session.
