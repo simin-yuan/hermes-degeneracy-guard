@@ -37,6 +37,18 @@ The answer is then **pinned** to ``mode.json`` in that directory, so it cannot m
 later: new incidents do not make a first install look old, and a first install does not flip to
 ``act`` on its second load. ``DEGENERACY_GUARD_MODE`` overrides everything in either direction and is
 never pinned. Its values are ``observe`` and ``act``; anything else is ignored rather than guessed at.
+
+The shared key
+--------------
+``HERMES_GUARD_MODE`` is read by every plugin in this family, so one setting turns enforcement on for
+all of them instead of three. It is consulted only when ``DEGENERACY_GUARD_MODE`` says nothing, and it
+does **not** move the pin: the pin records what this install decided on its own, and an operator's
+explicit setting is a different question that is answered fresh on every read.
+
+Its third value, ``ask``, maps to ``act`` here rather than to a separate mode: this guard's ``act``
+path already sends a loop-shaped tool call to the approval gate, so the only difference between the two
+names is what happens after a timeout, and this plugin refuses there by design. That refusal is
+documented rather than silently relaxed — a guard that fails open on timeout is not a guard.
 """
 
 from __future__ import annotations
@@ -50,7 +62,32 @@ from . import paths
 MODE_OBSERVE = "observe"
 MODE_ACT = "act"
 ENV = "DEGENERACY_GUARD_MODE"
+SHARED_ENV = "HERMES_GUARD_MODE"
 PIN_FILE = "mode.json"
+
+#: The shared key's vocabulary, mapped onto this plugin's two modes. ``act`` and ``block`` are what
+#: other plugins in the family call enforcement; ``ask`` maps to ``act`` for the reason in the module
+#: docstring. Anything absent from this table is ignored rather than guessed at.
+_SHARED_MODES = {
+    MODE_OBSERVE: MODE_OBSERVE,
+    MODE_ACT: MODE_ACT,
+    "block": MODE_ACT,
+    "ask": MODE_ACT,
+}
+
+
+def _from_env() -> tuple[str | None, str | None]:
+    """``(mode, key it came from)`` from an explicit setting, own key before shared key.
+
+    Own key first so nothing that is configured today changes behaviour when the shared key appears.
+    """
+    value = os.environ.get(ENV, "").strip().lower()
+    if value in (MODE_OBSERVE, MODE_ACT):
+        return value, ENV
+    shared = os.environ.get(SHARED_ENV, "").strip().lower()
+    if shared in _SHARED_MODES:
+        return _SHARED_MODES[shared], SHARED_ENV
+    return None, None
 
 #: Sampled once, when this package is imported - before any hook can write state, and before
 #: anything here resolves a path in a way that would create the directory. Tests set it directly
@@ -96,9 +133,9 @@ def _fresh() -> bool:
 
 
 def mode() -> str:
-    value = os.environ.get(ENV, "").strip().lower()
-    if value in (MODE_OBSERVE, MODE_ACT):
-        return value
+    forced, _origin = _from_env()
+    if forced:
+        return forced
     pinned = _read_pin()
     if pinned:
         return pinned["mode"]
@@ -115,9 +152,14 @@ def observes() -> bool:
 
 def describe() -> str:
     """One line for a status readout: the mode and where it came from."""
-    value = os.environ.get(ENV, "").strip().lower()
-    if value in (MODE_OBSERVE, MODE_ACT):
-        return f"{value} (from {ENV})"
+    forced, origin = _from_env()
+    if forced:
+        if origin == SHARED_ENV:
+            asked = os.environ.get(SHARED_ENV, "").strip().lower()
+            mapped = f" (asked for {asked!r}; the act path already goes through the approval gate)" \
+                if asked not in (MODE_OBSERVE, MODE_ACT) else ""
+            return f"{forced} (from {SHARED_ENV}){mapped}"
+        return f"{forced} (from {ENV})"
     pinned = _read_pin()
     if pinned:
         return f"{pinned['mode']} (pinned: {pinned.get('reason', 'decided earlier')})"

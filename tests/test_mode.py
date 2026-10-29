@@ -27,6 +27,7 @@ def _install(tmp_path, monkeypatch, *, ran_before: bool):
         home.mkdir()
     monkeypatch.setenv("DEGENERACY_GUARD_HOME", str(home))
     monkeypatch.delenv("DEGENERACY_GUARD_MODE", raising=False)
+    monkeypatch.delenv("HERMES_GUARD_MODE", raising=False)
     return home
 
 
@@ -68,6 +69,7 @@ def _hermes_install(tmp_path, monkeypatch, *, ran_before: bool):
     monkeypatch.setitem(sys.modules, "hermes_constants", hermes_constants)
     monkeypatch.delenv("DEGENERACY_GUARD_HOME", raising=False)
     monkeypatch.delenv("DEGENERACY_GUARD_MODE", raising=False)
+    monkeypatch.delenv("HERMES_GUARD_MODE", raising=False)
     monkeypatch.setattr(mode_mod, "_FRESH_AT_IMPORT", None, raising=False)
     return data
 
