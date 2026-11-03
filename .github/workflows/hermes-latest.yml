@@ -13,9 +13,9 @@ jobs:
   hermes-latest:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           repository: NousResearch/hermes-agent
           ref: main
@@ -28,7 +28,7 @@ jobs:
           echo "Hermes commit: $commit"
           echo "Hermes commit: \`$commit\`" >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.14"
 
@@ -36,7 +36,12 @@ jobs:
         run: |
           python -m pip install uv
           uv venv -p "$(command -v python)" "$RUNNER_TEMP/hermes-venv"
-          VIRTUAL_ENV="$RUNNER_TEMP/hermes-venv" uv pip install -e .hermes-agent pytest
+          # `uv pip install` does not read [tool.uv].override-dependencies, so copy Hermes's
+          # overrides out and pass them explicitly. Without them the install cannot resolve:
+          # browser-harness pins pillow==12.3.0 and Hermes pins Pillow==13.0.0.
+          python .github/scripts/hermes-overrides.py "$RUNNER_TEMP/hermes-overrides.txt"
+          VIRTUAL_ENV="$RUNNER_TEMP/hermes-venv" uv pip install -e .hermes-agent pytest \
+            --override "$RUNNER_TEMP/hermes-overrides.txt"
 
       # Plugin enabled through config.yaml in a temporary HERMES_HOME; no network.
       - name: hermes plugins validate / doctor (no network)
